@@ -296,8 +296,9 @@ img {
   }
 
   .filter-row {
-    margin: 0 -16px;
-    padding: 0 16px;
+    margin: -7px -16px -8px;
+    padding: 7px 16px 10px;
+    scroll-padding-inline: 16px;
   }
 
   .filter-group {
@@ -312,8 +313,9 @@ img {
   }
 
   .topic-row {
-    margin: 0 -16px;
-    padding: 0 16px;
+    margin: -7px -16px -8px;
+    padding: 7px 16px 10px;
+    scroll-padding-inline: 16px;
   }
 
   .filter-chip,
