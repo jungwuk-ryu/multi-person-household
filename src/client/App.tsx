@@ -1398,15 +1398,26 @@ function ConnectionsScreen({
   const targetSetlogs = setlogs
     .filter((setlog) => targetUserIds.includes(setlog.userId))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const ownMeetupSetlogs = setlogs
-    .filter((setlog) => setlog.userId === currentUser.id)
-    .sort((a, b) => {
-      const aVideo = a.mediaType === "video" ? 1 : 0;
-      const bVideo = b.mediaType === "video" ? 1 : 0;
-      if (aVideo !== bVideo) return bVideo - aVideo;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-  const meetupSetlogs = [...ownMeetupSetlogs, ...targetSetlogs].filter(
+  const sortForMeetup = (a: Setlog, b: Setlog) => {
+    const aVideo = a.mediaType === "video" ? 1 : 0;
+    const bVideo = b.mediaType === "video" ? 1 : 0;
+    if (aVideo !== bVideo) return bVideo - aVideo;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  };
+  const ownMeetupSetlog = setlogs.filter((setlog) => setlog.userId === currentUser.id).sort(sortForMeetup)[0];
+  const targetOtherSetlogs = targetSetlogs.filter((setlog) => setlog.userId !== currentUser.id).sort(sortForMeetup);
+  const fallbackOtherSetlogs = setlogs
+    .filter((setlog) => setlog.userId !== currentUser.id && !targetSetlogs.some((target) => target.id === setlog.id))
+    .sort(sortForMeetup);
+  const primaryOtherSetlogs = [...targetOtherSetlogs, ...fallbackOtherSetlogs].filter(
+    (setlog, index, list) => list.findIndex((item) => item.userId === setlog.userId) === index
+  );
+  const extraOtherSetlogs = [...targetOtherSetlogs, ...fallbackOtherSetlogs].filter(
+    (setlog) => !primaryOtherSetlogs.some((item) => item.id === setlog.id)
+  );
+  const meetupSetlogs = [ownMeetupSetlog, ...primaryOtherSetlogs, ...extraOtherSetlogs].filter(
+    (setlog): setlog is Setlog => Boolean(setlog)
+  ).filter(
     (setlog, index, list) => list.findIndex((item) => item.id === setlog.id) === index
   );
   const playableSetlogs = targetSetlogs;
