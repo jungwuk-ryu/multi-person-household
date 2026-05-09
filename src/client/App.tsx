@@ -533,6 +533,10 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return response.blob();
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("feed");
   const [activeFilter, setActiveFilter] = useState<Filter>("all");
@@ -921,11 +925,28 @@ function App() {
     createdAt: photo.createdAt || "지금"
   });
 
+  const waitForGeneratedAlbumItem = async (knownAlbumIds: Set<string>, sourceIds: string[]) => {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      await delay(4000);
+      const remoteAlbum = await api.getAlbum(currentUser.id);
+      const nextAlbumItems = normalizeAlbumItems(remoteAlbum);
+      if (nextAlbumItems.length) {
+        setAlbumItems(nextAlbumItems);
+      }
+      const completedItem = nextAlbumItems.find(
+        (item) => !knownAlbumIds.has(item.id) && sourceIds.every((sourceId) => item.sourceSetlogIds.includes(sourceId))
+      );
+      if (completedItem) return completedItem;
+    }
+    return null;
+  };
+
   const handleGenerateAiPhoto = async () => {
     const safeBaseSetlogId = selectedSetlogIds.includes(baseSetlogId) ? baseSetlogId : selectedSetlogIds[0] ?? baseSetlogId;
     const style = aiStyle;
     const styledTitle = style === "memo" ? "밋업 나우! 메모" : style === "3d" ? "밋업 나우! 3D" : "밋업 나우!";
     const styledPrompt = style === "3d" ? THREE_D_STYLE_PROMPT : MEMO_STYLE_PROMPT;
+    const knownAlbumIds = new Set(albumItems.map((item) => item.id));
     setIsGenerating(true);
     setAiGeneration({
       status: "base-generating",
@@ -987,14 +1008,39 @@ function App() {
     });
 
     if (!memoPhoto?.imageUrl) {
+      const lastError = api.getLastError();
+      const shouldWaitForServerResult =
+        !lastError || lastError.code === "REQUEST_TIMEOUT" || lastError.code === "HTTP_ERROR" || (lastError.status ?? 0) >= 500;
+      if (shouldWaitForServerResult) {
+        setAiGeneration({
+          status: "memo-generating",
+          style,
+          imageUrl: basePhoto.imageUrl,
+          message: `${style === "3d" ? "3D" : "메모"} 생성이 오래 걸리고 있어요. 서버에서 계속 만들고 있으니 완료되면 앨범에 표시할게요.`
+        });
+        showToast(`${style === "3d" ? "3D" : "메모"} 생성이 계속 진행 중이에요`);
+        const recoveredAlbumItem = await waitForGeneratedAlbumItem(knownAlbumIds, selectedSetlogIds);
+        if (recoveredAlbumItem) {
+          setIsGenerating(false);
+          setAiGeneration({
+            status: "completed",
+            style,
+            imageUrl: recoveredAlbumItem.imageUrl,
+            title: styledTitle,
+            message: `${style === "3d" ? "3D 재구성" : "손글씨 메모"} 버전이 앨범에 저장됐어요.`
+          });
+          showToast(`${styledTitle} 사진이 완성됐어요`);
+          return;
+        }
+      }
       setIsGenerating(false);
       setAiGeneration({
         status: "failed",
         style,
         imageUrl: basePhoto.imageUrl,
-        message: api.getLastError()?.message || `${style === "3d" ? "3D" : "메모"} 버전을 만들지 못했어요. 기본 사진은 화면에 남겨둘게요.`
+        message: lastError?.message || `${style === "3d" ? "3D" : "메모"} 버전을 만들지 못했어요. 기본 사진은 화면에 남겨둘게요.`
       });
-      showToast(api.getLastError()?.message || `${style === "3d" ? "3D" : "메모"} 버전을 만들지 못했어요`);
+      showToast(lastError?.message || `${style === "3d" ? "3D" : "메모"} 버전을 만들지 못했어요`);
       return;
     }
 
