@@ -20,6 +20,7 @@ from app.services.media import media_path_from_url, normalize_media_type, save_u
 from app.services.moderation import ModerationService
 
 router = APIRouter(prefix="/api/setlogs", tags=["setlogs"])
+MIN_VALID_UPLOAD_BYTES = 1024
 
 
 @router.get("", response_model=SetlogsResponse)
@@ -66,6 +67,16 @@ def _reject_blocked_setlog(media_path: Path | None = None) -> None:
     raise api_error(status.HTTP_400_BAD_REQUEST, "SETLOG_REJECTED", "Gemini rejected this Setlog for safety.")
 
 
+def _reject_invalid_upload(media_path: Path | None = None) -> None:
+    _delete_saved_media(media_path)
+    raise api_error(status.HTTP_400_BAD_REQUEST, "INVALID_MEDIA_UPLOAD", "Uploaded media could not be processed.")
+
+
+def _validate_saved_upload(media_path: Path | None) -> None:
+    if media_path is None or not media_path.exists() or media_path.stat().st_size < MIN_VALID_UPLOAD_BYTES:
+        _reject_invalid_upload(media_path)
+
+
 @router.post("", response_model=SetlogCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_setlog(
     userId: str = Form(...),
@@ -82,6 +93,7 @@ async def create_setlog(
     media_url = await save_upload(media, setlog_id)
     media_path = media_path_from_url(media_url)
     media_content_type = normalize_media_type(media.content_type)
+    _validate_saved_upload(media_path)
     try:
         moderation = await ModerationService().moderate_setlog(
             caption=caption,

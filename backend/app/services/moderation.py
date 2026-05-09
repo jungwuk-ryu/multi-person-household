@@ -52,6 +52,30 @@ class ModerationService:
             return ModerationStatus.blocked
         return fallback_status
 
+    async def moderate_chat_text(self, text: str) -> ModerationStatus:
+        fallback_status = self.moderate(text)
+        if fallback_status == ModerationStatus.blocked:
+            return ModerationStatus.blocked
+
+        settings = get_settings()
+        if not settings.gemini_api_key:
+            return fallback_status
+
+        payload = self._build_chat_payload(text)
+        try:
+            data = await self._call_gemini(
+                payload,
+                model=settings.gemini_moderation_model,
+                timeout=min(settings.gemini_moderation_timeout_seconds, 6.0),
+                max_attempts=1,
+            )
+        except HTTPException:
+            return fallback_status
+
+        if self._status_from_gemini_response(data) == ModerationStatus.blocked:
+            return ModerationStatus.blocked
+        return fallback_status
+
     async def suggest_setlog_caption(
         self,
         *,
@@ -149,13 +173,42 @@ class ModerationService:
             },
         }
 
+    def _build_chat_payload(self, text: str) -> dict[str, Any]:
+        return {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": self._build_chat_prompt(text)}],
+                }
+            ],
+            "safetySettings": SAFETY_SETTINGS,
+            "generationConfig": {
+                "temperature": 0,
+                "maxOutputTokens": 48,
+                "responseMimeType": "application/json",
+            },
+        }
+
+    def _build_chat_prompt(self, text: str) -> str:
+        return (
+            "너는 1인 가구 연결 서비스 '다인가구'의 실시간 채팅 안전 필터야.\n"
+            "메시지를 답변하거나 고치지 말고 승인 여부만 판단해.\n"
+            "거부해야 하는 경우: 성적/노출 표현, 혐오/괴롭힘, 협박/폭력, 자해/위험행위, 개인정보 요구/노출, "
+            "불법행위, 스팸/광고, 만남 강요, 스토킹/집착, 미성년자 안전 문제가 의심되는 내용.\n"
+            "평범한 식사 약속, 동네 수다, 가벼운 농담, 일상 대화는 approved야.\n"
+            '반드시 JSON만 반환해: {"decision":"approved"|"blocked","reason":"짧은 한국어 사유"}\n'
+            f"채팅 메시지: {text}"
+        )
+
     def _build_caption_prompt(self) -> str:
         return (
             "너는 '다인가구'의 짧은 영상 로그 썸네일을 보고 한 줄 상태를 추천하는 에디터야.\n"
             "먼저 이미지가 서비스에 안전한지 확인해. 성적/노출, 폭력/자해, 혐오/괴롭힘, 개인정보, 위험행위, "
             "불법행위, 스팸, 미성년자 안전 문제가 의심되면 blocked로 판단해.\n"
-            "안전하면 한국어로 자연스럽고 실제 커뮤니티 말투의 한 줄 상태를 추천해. 12~28자, 해시태그/따옴표/이모지 없이, "
-            "이미지에서 보이는 상황만 바탕으로 써.\n"
+            "안전하면 사용자가 직접 적은 소개글처럼 한국어 한 줄 상태를 추천해. AI가 설명하는 문장 금지.\n"
+            "말투는 20대 한국인이 친구한테 툭 올리는 느낌: 자연스러운 1인칭, 짧은 혼잣말, 살짝 편한 커뮤니티 톤.\n"
+            "8~24자, 해시태그/따옴표 없이, 이모지는 쓰지 말고, 이미지에서 보이는 상황만 바탕으로 써.\n"
+            "좋은 예: 오늘 저녁은 이걸로 끝, 집 오자마자 바로 밥, 퇴근하고 잠깐 숨 돌림, 이 분위기 꽤 좋다\n"
             '반드시 JSON만 반환해: {"decision":"approved"|"blocked","caption":"추천 문장","reason":"짧은 사유"}'
         )
 

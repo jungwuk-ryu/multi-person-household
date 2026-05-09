@@ -883,20 +883,28 @@ function App() {
     showToast("번개방에 참여했어요");
   };
 
-  const handleSendMessage = (roomId: string) => {
+  const handleSendMessage = async (roomId: string) => {
     const text = chatDraft.trim();
     if (!text) return;
+    setChatDraft("");
+    const sentMessage = await api.sendChatMessage(roomId, currentUser.id, text);
+    if (!sentMessage) {
+      const error = api.getLastError();
+      if (error?.code !== "CHAT_MESSAGE_BLOCKED" && error?.code !== "EMPTY_CHAT_MESSAGE") {
+        showToast("메시지를 보내지 못했어요");
+      }
+      return;
+    }
     setMessages((items) => [
       ...items,
       {
-        id: `m_${Date.now()}`,
-        roomId,
-        senderId: currentUser.id,
-        text,
-        createdAt: "지금"
+        id: sentMessage.id,
+        roomId: sentMessage.roomId || roomId,
+        senderId: sentMessage.senderId || currentUser.id,
+        text: sentMessage.text || text,
+        createdAt: sentMessage.createdAt || "지금"
       }
     ]);
-    setChatDraft("");
   };
 
   const openAiSheet = () => {

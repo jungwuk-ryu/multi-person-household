@@ -5,8 +5,9 @@ from sqlmodel import Session, select
 
 from app.crud import api_error, get_user_or_404, latest_message, make_id
 from app.database import get_session
-from app.models import ChatMessage, ChatRoom, User
+from app.models import ChatMessage, ChatRoom, ModerationStatus, User
 from app.schemas import ChatMessageCreateRequest, ChatMessageCreateResponse, ChatMessagesResponse, ChatsResponse
+from app.services.moderation import ModerationService
 from app.services.realtime import manager
 
 router = APIRouter(prefix="/api/chats", tags=["chats"])
@@ -63,7 +64,13 @@ async def create_message(room_id: str, payload: ChatMessageCreateRequest, sessio
         raise api_error(status.HTTP_404_NOT_FOUND, "CHAT_ROOM_NOT_FOUND", "Chat room not found")
     if payload.sender_id not in room.member_ids:
         raise api_error(status.HTTP_400_BAD_REQUEST, "SENDER_NOT_IN_ROOM", "Sender is not a room member")
-    message = ChatMessage(id=make_id("msg"), room_id=room.id, sender_id=payload.sender_id, text=payload.text, image_url=None, created_at=datetime.now(timezone.utc))
+    text = payload.text.strip()
+    if not text:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "EMPTY_CHAT_MESSAGE", "Message text is required")
+    moderation = await ModerationService().moderate_chat_text(text)
+    if moderation == ModerationStatus.blocked:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "CHAT_MESSAGE_BLOCKED", "Message was removed by safety moderation")
+    message = ChatMessage(id=make_id("msg"), room_id=room.id, sender_id=payload.sender_id, text=text, image_url=None, created_at=datetime.now(timezone.utc))
     room.updated_at = message.created_at
     session.add(message)
     session.add(room)

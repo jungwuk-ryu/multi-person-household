@@ -1,5 +1,6 @@
 import base64
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 os.environ["GEMINI_API_KEY"] = ""
@@ -23,6 +24,7 @@ with Session(engine) as session:
     seed_database(session)
 
 client = TestClient(app)
+SEED_UPLOAD_DIR = Path(__file__).resolve().parents[1] / "app" / "uploads" / "seed"
 
 
 def test_health_check():
@@ -75,20 +77,22 @@ def test_url_setlog_creation_and_mock_moderation_blocked_exclusion():
 
 
 def test_multipart_setlog_creation():
+    image_bytes = (SEED_UPLOAD_DIR / "IMG_9563.jpg").read_bytes()
     response = client.post(
         "/api/setlogs",
         data={"userId": "u_01", "caption": "Uploaded dinner", "category": "meal", "visibility": "public", "cityLabel": "성수"},
-        files={"media": ("meal.jpg", b"fake image", "image/jpeg")},
+        files={"media": ("meal.jpg", image_bytes, "image/jpeg")},
     )
     assert response.status_code == 201
     assert response.json()["item"]["mediaUrl"].startswith("/uploads/setlogs/")
 
 
 def test_multipart_webm_with_codec_parameter_is_accepted():
+    video_bytes = (SEED_UPLOAD_DIR / "IMG_9563.mp4").read_bytes()
     response = client.post(
         "/api/setlogs",
         data={"userId": "u_01", "caption": "Uploaded video", "category": "daily", "visibility": "public", "cityLabel": "성수"},
-        files={"media": ("clip.webm", b"fake webm", "video/webm;codecs=vp9")},
+        files={"media": ("clip.webm", video_bytes, "video/webm;codecs=vp9")},
     )
     assert response.status_code == 201
     item = response.json()["item"]
@@ -108,12 +112,13 @@ def test_caption_suggestion_fallback_without_gemini_key():
 
 
 def test_multipart_setlog_blocked_caption_is_rejected():
+    image_bytes = (SEED_UPLOAD_DIR / "IMG_9563.jpg").read_bytes()
     with Session(engine) as session:
         before_count = len(session.exec(select(Setlog)).all())
     response = client.post(
         "/api/setlogs",
         data={"userId": "u_01", "caption": "blocked upload", "category": "meal", "visibility": "public", "cityLabel": "성수"},
-        files={"media": ("blocked.jpg", b"fake image", "image/jpeg")},
+        files={"media": ("blocked.jpg", image_bytes, "image/jpeg")},
     )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "SETLOG_REJECTED"
@@ -181,11 +186,21 @@ def test_flash_meet_join_and_self_join_error():
 
 
 def test_chat_message_creation():
-    response = client.post("/api/chats/c_01/messages", json={"senderId": "u_01", "text": "I am heading out now."})
+    response = client.post("/api/chats/c_01/messages", json={"senderId": "u_01", "text": " I am heading out now. "})
     assert response.status_code == 200
     item = response.json()["item"]
     assert item["imageUrl"] is None
     assert item["text"] == "I am heading out now."
+
+
+def test_blocked_chat_message_is_silently_rejected():
+    before = client.get("/api/chats/c_01/messages").json()["items"]
+    response = client.post("/api/chats/c_01/messages", json={"senderId": "u_01", "text": "blocked chat"})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "CHAT_MESSAGE_BLOCKED"
+    after = client.get("/api/chats/c_01/messages").json()["items"]
+    assert len(after) == len(before)
+    assert all(message["text"] != "blocked chat" for message in after)
 
 
 def test_mock_ai_group_photo_generation():

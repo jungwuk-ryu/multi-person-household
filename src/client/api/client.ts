@@ -638,6 +638,17 @@ export const api = {
       }
     ),
 
+  sendChatMessage: (roomId: string, senderId: string, text: string) =>
+    requestJson<ChatMessageDto>(
+      `/api/chats/${encodeURIComponent(roomId)}/messages`,
+      {
+        method: "POST",
+        body: jsonBody({ senderId, text }),
+        timeoutMs: 9000
+      },
+      (data) => normalizeChatMessage(unwrap(data, "item", "message", "data"))
+    ),
+
   getAlbum: (userId: string) =>
     requestJson<AiPhotoResponseDto[]>(
       `/api/album?userId=${encodeURIComponent(userId)}`,
