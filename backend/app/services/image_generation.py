@@ -321,7 +321,8 @@ Create one realistic photo for the Korean app '다인가구'.
 Use the provided input images as the actual source Setlogs. Do not ignore them or invent a completely new scene.
 Use this as the only location: {base_place}.
 The first provided input image is the user-selected 기준 장소. Use that first image as the strongest reference for the room/place, lighting, camera angle, and background.
-Show every participant from the source logs together in that same place, as if they actually met there.
+Show only people who are actually visible in the provided input images. If a source image has no visible person, do not invent or force a person for that source; use that image only as a reference for its place, food, object, mood, or background detail.
+Place the visible people from the source logs together in the selected 기준 장소, as if they actually met there.
 Do not create a collage, split screen, poster, UI mockup, stickers, captions, watermarks, or duplicated people.
 Keep the scene photorealistic and casual: {composition}.
 Preserve the people, clothing, food, objects, pose, and atmosphere visible in the source images as much as possible, but the final image must look like one single camera photo.

@@ -327,6 +327,7 @@ def test_real_group_photo_uses_selected_setlog_images_and_saves_generated_output
         assert [item[0] for item in image_inputs] == ["base.jpg", "friend.jpg"]
         assert "provided input images" in fake_images.edit_calls[0]["prompt"]
         assert "first provided input image is the user-selected 기준 장소" in fake_images.edit_calls[0]["prompt"]
+        assert "If a source image has no visible person, do not invent or force a person" in fake_images.edit_calls[0]["prompt"]
     finally:
         get_settings.cache_clear()
 
