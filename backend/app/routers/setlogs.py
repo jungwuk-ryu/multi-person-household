@@ -9,7 +9,7 @@ from app.crud import api_error, friend_ids, get_user_or_404, make_id, setlog_out
 from app.database import get_session
 from app.models import MediaType, ModerationStatus, Setlog, SetlogCategory, Visibility
 from app.schemas import SetlogCreateResponse, SetlogFromUrlRequest, SetlogsResponse
-from app.services.media import media_path_from_url, save_upload, save_url_image
+from app.services.media import media_path_from_url, normalize_media_type, save_upload, save_url_image
 from app.services.moderation import ModerationService
 
 router = APIRouter(prefix="/api/setlogs", tags=["setlogs"])
@@ -73,19 +73,20 @@ async def create_setlog(
     setlog_id = make_id("setlog")
     media_url = await save_upload(media, setlog_id)
     media_path = media_path_from_url(media_url)
+    media_content_type = normalize_media_type(media.content_type)
     try:
         moderation = await ModerationService().moderate_setlog(
             caption=caption,
             filename=media.filename,
             media_path=media_path,
-            mime_type=media.content_type,
+            mime_type=media_content_type,
         )
     except HTTPException:
         _delete_saved_media(media_path)
         raise
     if moderation == ModerationStatus.blocked:
         _reject_blocked_setlog(media_path)
-    media_type = MediaType.video if (media.content_type or "").startswith("video/") else MediaType.image
+    media_type = MediaType.video if media_content_type.startswith("video/") else MediaType.image
     setlog = Setlog(id=setlog_id, user_id=user.id, media_type=media_type, media_url=media_url, thumbnail_url=media_url, caption=caption, category=category, visibility=visibility, city_label=cityLabel, hour_slot=_hour_slot(), moderation_status=moderation)
     session.add(setlog)
     session.commit()

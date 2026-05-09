@@ -705,6 +705,23 @@ img {
     gap: 14px;
   }
 
+  .credit-pill {
+    min-width: 84px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--setlog-coral);
+    font-size: 12px;
+    font-weight: 900;
+    box-shadow: var(--shadow-glass);
+    -webkit-backdrop-filter: blur(14px) saturate(145%);
+    backdrop-filter: blur(14px) saturate(145%);
+  }
+
   .connection-switch {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -736,6 +753,82 @@ img {
   .connection-strip {
     margin: 0 -16px;
     padding: 0 16px 2px;
+  }
+
+  .thread-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .thread-row {
+    min-height: 74px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--glass-line);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.64);
+    padding: 10px 12px;
+    color: var(--setlog-ink);
+    text-align: left;
+    box-shadow: var(--shadow-glass);
+    -webkit-backdrop-filter: blur(18px) saturate(145%);
+    backdrop-filter: blur(18px) saturate(145%);
+    transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  }
+
+  .thread-row.selected {
+    transform: translateX(3px);
+    border-color: rgba(255, 90, 102, 0.42);
+    background: rgba(255, 236, 239, 0.78);
+    box-shadow: var(--shadow-coral);
+  }
+
+  .thread-copy {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .thread-copy > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .thread-copy strong,
+  .thread-copy span,
+  .thread-copy p,
+  .thread-row > small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .thread-copy strong {
+    min-width: 0;
+    color: var(--setlog-ink);
+    font-size: 15px;
+    font-weight: 900;
+  }
+
+  .thread-copy span,
+  .thread-row > small {
+    color: var(--setlog-muted);
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .thread-copy p {
+    margin-top: 5px;
+    color: var(--setlog-muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .thread-row > small {
+    min-width: 38px;
+    text-align: right;
   }
 
   .connection-card {
@@ -812,6 +905,12 @@ img {
     box-shadow: var(--shadow-glass);
     -webkit-backdrop-filter: blur(18px) saturate(145%);
     backdrop-filter: blur(18px) saturate(145%);
+  }
+
+  .connection-workspace {
+    display: grid;
+    gap: 10px;
+    animation: organizeIn 240ms ease-out;
   }
 
   .more-screen {
@@ -995,8 +1094,8 @@ img {
 
   .connection-media {
     position: relative;
-    min-height: 340px;
-    height: min(56dvh, 500px);
+    min-height: 392px;
+    height: min(58dvh, 520px);
     overflow: hidden;
     background: var(--setlog-soft-black);
   }
@@ -1109,10 +1208,70 @@ img {
   .viewer-chat-panel {
     display: grid;
     gap: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.54);
+    border-radius: 22px;
     background: rgba(255, 255, 255, 0.5);
     padding: 12px;
     -webkit-backdrop-filter: blur(18px) saturate(145%);
     backdrop-filter: blur(18px) saturate(145%);
+  }
+
+  .connection-tool-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .meetup-button {
+    min-height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 90, 102, 0.9);
+    color: var(--setlog-white);
+    padding: 0 16px;
+    font-size: 15px;
+    font-weight: 900;
+    box-shadow: var(--shadow-coral), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    -webkit-backdrop-filter: blur(14px) saturate(145%);
+    backdrop-filter: blur(14px) saturate(145%);
+  }
+
+  .meetup-button span {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
+  .meetup-button:disabled,
+  .accent-button:disabled,
+  .primary-button:disabled {
+    opacity: 0.56;
+  }
+
+  .mini-album-strip {
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+  }
+
+  .mini-album-strip img {
+    width: 42px;
+    height: 42px;
+    overflow: hidden;
+    border: 2px solid rgba(255, 255, 255, 0.82);
+    border-radius: 14px;
+    object-fit: cover;
+    box-shadow: var(--shadow-card);
+  }
+
+  .mini-album-strip img + img {
+    margin-left: -12px;
   }
 
   .viewer-message-row {
@@ -1285,6 +1444,29 @@ img {
     box-shadow: var(--shadow-coral), inset 0 1px 0 rgba(255, 255, 255, 0.18);
     -webkit-backdrop-filter: blur(14px) saturate(145%);
     backdrop-filter: blur(14px) saturate(145%);
+  }
+
+  .ghost-button {
+    min-height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid var(--glass-line);
+    background: rgba(255, 255, 255, 0.66);
+    color: var(--setlog-ink);
+    padding: 0 18px;
+    font-size: 15px;
+    font-weight: 900;
+    box-shadow: var(--shadow-glass);
+    -webkit-backdrop-filter: blur(14px) saturate(145%);
+    backdrop-filter: blur(14px) saturate(145%);
+  }
+
+  .confirm-actions {
+    display: grid;
+    grid-template-columns: 0.8fr 1.2fr;
+    gap: 10px;
   }
 
   .accent-button:active,
@@ -1867,6 +2049,35 @@ img {
     margin-top: 1px;
   }
 
+  .credit-panel {
+    min-height: 62px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.66);
+    padding: 12px 14px;
+    box-shadow: var(--shadow-glass);
+    -webkit-backdrop-filter: blur(16px) saturate(145%);
+    backdrop-filter: blur(16px) saturate(145%);
+  }
+
+  .credit-panel span,
+  .credit-panel strong {
+    font-size: 14px;
+    font-weight: 900;
+  }
+
+  .credit-panel span {
+    color: var(--setlog-coral);
+  }
+
+  .credit-panel strong {
+    color: var(--setlog-muted);
+  }
+
   .ai-preview {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2086,6 +2297,17 @@ img {
 @keyframes safetyIn {
   from {
     transform: translateY(10px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes organizeIn {
+  from {
+    transform: translateY(12px) scale(0.985);
     opacity: 0;
   }
   to {

@@ -15,7 +15,8 @@ import {
   Users,
   Utensils,
   Wand2,
-  Wind
+  Wind,
+  X
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -547,9 +548,18 @@ function App() {
     });
 
     if (!createdSetlog || createdSetlog.moderationStatus !== "approved") {
-      setUploadStatus("안전 기준에 맞지 않아 올릴 수 없어요");
+      const errorCode = api.getLastError()?.code;
+      const message =
+        createdSetlog?.moderationStatus === "blocked" || errorCode === "SETLOG_REJECTED"
+          ? "안전 기준에 맞지 않아 올릴 수 없어요"
+          : errorCode === "GEMINI_MODERATION_FAILED"
+            ? "영상 확인이 지연되고 있어요. 잠시 뒤 다시 시도해 주세요"
+            : errorCode === "UNSUPPORTED_MEDIA_TYPE"
+              ? "영상 형식을 처리하지 못했어요. 다시 촬영해 주세요"
+              : "업로드에 실패했어요. 잠시 뒤 다시 시도해 주세요";
+      setUploadStatus(message);
       setIsUploading(false);
-      showToast("안전 기준에 맞지 않아 올릴 수 없어요");
+      showToast(message);
       return;
     }
 
@@ -667,7 +677,7 @@ function App() {
       ]);
       setIsGenerating(false);
       setSheet(null);
-      showToast("같이 있었던 사진이 완성됐어요");
+      showToast("밋업 나우! 사진이 완성됐어요");
     }, 900);
   };
 
@@ -996,7 +1006,7 @@ function ConnectionsScreen({
 
   const selectedFriend = activeTarget.type === "friend" ? getUser(activeTarget.id) : null;
   const selectedRoom = activeTarget.type === "group" ? rooms.find((room) => room.id === activeTarget.id) ?? rooms[0] : null;
-  const targetUserIds = selectedFriend ? [selectedFriend.id] : selectedRoom?.participantIds ?? [currentUser.id];
+  const targetUserIds = selectedFriend ? [currentUser.id, selectedFriend.id] : selectedRoom?.participantIds ?? [currentUser.id];
   const targetSetlogs = setlogs
     .filter((setlog) => targetUserIds.includes(setlog.userId))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -1006,7 +1016,10 @@ function ConnectionsScreen({
     ? `${selectedFriend.cityLabel} · ${targetSetlogs.length}개 로그`
     : `${selectedRoom?.cityLabel ?? currentUser.cityLabel} · ${selectedRoom?.participantIds.length ?? 1}명`;
   const targetAvatars = selectedFriend ? [selectedFriend, currentUser] : (selectedRoom?.participantIds ?? []).map(getUser);
-  const recentMessages = messages.slice(-2);
+  const targetRoomId = selectedRoom?.id ?? "c_01";
+  const targetMessages = messages.filter((message) => selectedFriend || message.roomId === targetRoomId || message.roomId === "c_01");
+  const recentMessages = (targetMessages.length ? targetMessages : messages).slice(-3);
+  const latestMessage = messages[messages.length - 1];
 
   const switchMode = (nextMode: ConnectionMode) => {
     setMode(nextMode);
@@ -1017,7 +1030,7 @@ function ConnectionsScreen({
     setSelectedSetlogIds(selectedSetlogIds.includes(id) ? selectedSetlogIds.filter((item) => item !== id) : [...selectedSetlogIds, id]);
   };
 
-  const handleTargetPhoto = () => {
+  const handleMeetupNow = () => {
     const ids = targetSetlogs.slice(0, 4).map((setlog) => setlog.id);
     if (ids.length < 2) return;
     setSelectedSetlogIds(ids);
@@ -1030,8 +1043,9 @@ function ConnectionsScreen({
       <section className="connections-header">
         <div>
           <h2 className="page-title">친구와 그룹</h2>
-          <p className="helper-copy">함께 남긴 로그와 사진을 한 곳에서 이어봐요.</p>
+          <p className="helper-copy">대화와 로그를 한 화면에서 이어봐요.</p>
         </div>
+        <span className="credit-pill">크레딧 10</span>
       </section>
 
       <div className="connection-switch" aria-label="친구 또는 그룹 보기">
@@ -1043,23 +1057,27 @@ function ConnectionsScreen({
         </button>
       </div>
 
-      <section className="connection-strip" aria-label={mode === "friends" ? "친구 목록" : "그룹 목록"}>
+      <section className="thread-list" aria-label={mode === "friends" ? "친구 채팅 목록" : "그룹 채팅 목록"}>
         {mode === "friends" &&
           friendUsers.map((friend) => {
-            const count = setlogs.filter((setlog) => setlog.userId === friend.id).length;
+            const count = setlogs.filter((setlog) => setlog.userId === friend.id || setlog.userId === currentUser.id).length;
             const selected = activeTarget.type === "friend" && activeTarget.id === friend.id;
+            const latestSetlog = setlogs.find((setlog) => setlog.userId === friend.id || setlog.userId === currentUser.id);
             return (
               <button
                 key={friend.id}
-                className={`connection-card ${selected ? "selected" : ""}`}
+                className={`thread-row ${selected ? "selected" : ""}`}
                 onClick={() => setSelectedTarget({ type: "friend", id: friend.id })}
               >
                 <UserAvatar user={friend} className={selected ? "active" : ""} />
-                <span>
-                  <strong>{friend.nickname}</strong>
-                  <small>{friend.cityLabel} · {count}개 로그</small>
-                </span>
-                <ChevronRight size={18} />
+                <div className="thread-copy">
+                  <div>
+                    <strong>{friend.nickname}</strong>
+                    <span>{latestMessage?.createdAt ?? "방금"}</span>
+                  </div>
+                  <p>{latestSetlog?.caption ?? latestMessage?.text ?? "최근 로그를 확인해보세요"}</p>
+                </div>
+                <small>{count}개</small>
               </button>
             );
           })}
@@ -1067,10 +1085,11 @@ function ConnectionsScreen({
           rooms.map((room) => {
             const selected = activeTarget.type === "group" && activeTarget.id === room.id;
             const participants = room.participantIds.map(getUser);
+            const roomSetlogs = setlogs.filter((setlog) => room.participantIds.includes(setlog.userId));
             return (
               <button
                 key={room.id}
-                className={`connection-card group ${selected ? "selected" : ""}`}
+                className={`thread-row ${selected ? "selected" : ""}`}
                 onClick={() => setSelectedTarget({ type: "group", id: room.id })}
               >
                 <div className="connection-avatar-stack">
@@ -1078,44 +1097,49 @@ function ConnectionsScreen({
                     <UserAvatar key={participant.id} user={participant} className="participant-avatar" />
                   ))}
                 </div>
-                <span>
-                  <strong>{room.title}</strong>
-                  <small>{room.cityLabel} · {participants.length}명</small>
-                </span>
-                <ChevronRight size={18} />
+                <div className="thread-copy">
+                  <div>
+                    <strong>{room.title}</strong>
+                    <span>{room.cityLabel}</span>
+                  </div>
+                  <p>{room.message}</p>
+                </div>
+                <small>{roomSetlogs.length}개</small>
               </button>
             );
           })}
       </section>
 
-      <section className="connection-viewer">
-        <div className="connection-media">
-          {heroSetlog?.mediaUrl ? (
-            <video src={heroSetlog.mediaUrl} poster={heroSetlog.thumbnailUrl} autoPlay muted loop playsInline />
-          ) : (
-            <img src={heroSetlog?.thumbnailUrl ?? media.generated} alt={`${targetTitle} 로그`} />
-          )}
-          <div className="connection-overlay">
-            <div className="connection-overlay-top">
-              <div className="connection-avatar-stack on-media">
-                {targetAvatars.slice(0, 4).map((user) => (
-                  <UserAvatar key={user.id} user={user} className="participant-avatar" />
-                ))}
+      <section className="connection-workspace" key={`${activeTarget.type}-${activeTarget.id}`}>
+        <div className="connection-viewer">
+          <div className="connection-media">
+            {heroSetlog?.mediaUrl ? (
+              <video src={heroSetlog.mediaUrl} poster={heroSetlog.thumbnailUrl} autoPlay muted loop playsInline />
+            ) : (
+              <img src={heroSetlog?.thumbnailUrl ?? media.generated} alt={`${targetTitle} 로그`} />
+            )}
+            <div className="connection-overlay">
+              <div className="connection-overlay-top">
+                <div className="connection-avatar-stack on-media">
+                  {targetAvatars.slice(0, 4).map((user) => (
+                    <UserAvatar key={user.id} user={user} className="participant-avatar" />
+                  ))}
+                </div>
+                <span>{targetSubtitle}</span>
               </div>
-              <span>{targetSubtitle}</span>
-            </div>
-            <div>
-              <h3>{targetTitle}</h3>
-              <p>{heroSetlog?.caption ?? "아직 올라온 로그가 없어요."}</p>
-              <div className="viewer-actions">
-                <button className="viewer-action" onClick={() => chatInputRef.current?.focus()}>
-                  <MessageCircle size={17} />
-                  채팅
-                </button>
-                <button className="viewer-action light" onClick={handleTargetPhoto} disabled={targetSetlogs.length < 2}>
-                  <ImagePlus size={17} />
-                  같이 사진
-                </button>
+              <div>
+                <h3>{targetTitle}</h3>
+                <p>{heroSetlog?.caption ?? "아직 올라온 로그가 없어요."}</p>
+                <div className="viewer-actions">
+                  <button className="viewer-action" onClick={() => chatInputRef.current?.focus()}>
+                    <MessageCircle size={17} />
+                    채팅
+                  </button>
+                  <button className="viewer-action light" onClick={handleMeetupNow} disabled={targetSetlogs.length < 2}>
+                    <Sparkles size={17} />
+                    밋업 나우!
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1144,23 +1168,35 @@ function ConnectionsScreen({
             </button>
           </div>
         </div>
+        <div className="connection-tool-panel">
+          <button className="meetup-button" onClick={handleMeetupNow} disabled={targetSetlogs.length < 2}>
+            <Wand2 size={18} />
+            밋업 나우!
+            <span>크레딧 10</span>
+          </button>
+          <div className="mini-album-strip">
+            {albumItems.slice(0, 3).map((item) => (
+              <img key={item.id} src={item.imageUrl} alt={item.title} />
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="ai-hero">
         <div>
-          <p className="text-[12px] font-extrabold text-coral">사진첩</p>
-          <h3 className="section-title">같이 있었던 사진</h3>
-          <p className="helper-copy">친구와 그룹 로그를 골라 한 장의 장면으로 만들어요.</p>
+          <p className="text-[12px] font-extrabold text-coral">AI 사진</p>
+          <h3 className="section-title">밋업 나우!</h3>
+          <p className="helper-copy">선택한 로그를 한 장소에 모인 사진처럼 만들어요.</p>
         </div>
         <button className="accent-button" onClick={onOpenAi} disabled={selectedSetlogIds.length < 2}>
           <Wand2 size={18} />
-          만들기
+          밋업 나우!
         </button>
       </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="section-title">같이 담을 로그</h3>
+          <h3 className="section-title">밋업에 담을 로그</h3>
           <span className="text-[12px] font-extrabold text-muted">{selectedSetlogIds.length}개 선택</span>
         </div>
         <div className="select-grid compact">
@@ -1189,11 +1225,9 @@ function ConnectionsScreen({
             <div className="p-3">
               <div className="flex items-center justify-between gap-2">
                 <strong>{item.title}</strong>
-                <span className={item.type === "ai_group_photo" ? "ai-badge" : "frame-badge"}>
-                  {item.type === "ai_group_photo" ? "함께" : "로그"}
-                </span>
+                <span className={item.type === "ai_group_photo" ? "ai-badge" : "frame-badge"}>{item.type === "ai_group_photo" ? "AI" : "로그"}</span>
               </div>
-              <p>{item.type === "ai_group_photo" ? "같이 있었던 장면" : "다인가구에서 남긴 순간"}</p>
+              <p>{item.type === "ai_group_photo" ? "밋업 나우!로 만든 장면" : "다인가구에서 남긴 순간"}</p>
             </div>
           </article>
         ))}
@@ -1283,16 +1317,16 @@ function AlbumScreen({
       <section className="ai-hero">
         <div>
           <p className="text-[12px] font-extrabold text-coral">함께한 기억</p>
-          <h2 className="page-title">같이 있었던 사진</h2>
-          <p className="helper-copy">각자의 순간을 한 장의 사진으로 모아요.</p>
+          <h2 className="page-title">밋업 나우!</h2>
+          <p className="helper-copy">각자의 순간을 한 장소의 사진처럼 모아요.</p>
         </div>
         <button className="accent-button" onClick={onOpenAi} disabled={selectedSetlogIds.length < 2}>
           <Wand2 size={18} />
-          만들기
+          밋업 나우!
         </button>
       </section>
       <section className="space-y-3">
-        <h3 className="section-title">같이 담을 로그</h3>
+        <h3 className="section-title">밋업에 담을 로그</h3>
         <div className="select-grid">
           {setlogs.slice(0, 6).map((setlog) => (
             <div
@@ -1325,7 +1359,7 @@ function AlbumScreen({
                   {item.type === "ai_group_photo" ? "함께" : "로그"}
                 </span>
               </div>
-              <p>{item.type === "ai_group_photo" ? "같이 있었던 장면" : "다인가구에서 남긴 순간"}</p>
+              <p>{item.type === "ai_group_photo" ? "밋업 나우!로 만든 장면" : "다인가구에서 남긴 순간"}</p>
             </div>
           </article>
         ))}
@@ -1670,7 +1704,7 @@ function UploadSheet({
 
     recorder.onstop = () => {
       stopTimers();
-      const type = recorder.mimeType || "video/webm";
+      const type = (recorder.mimeType || "video/webm").split(";", 1)[0] || "video/webm";
       const videoBlob = new Blob(chunksRef.current, { type });
       const videoUrl = URL.createObjectURL(videoBlob);
       const thumbnailUrl = captureThumbnail();
@@ -1826,7 +1860,7 @@ function AiSheet({
 }) {
   const base = selectedSetlogs.find((setlog) => setlog.id === baseSetlogId) ?? selectedSetlogs[0];
   return (
-    <BottomSheet title="같이 있었던 사진" onClose={onClose}>
+    <BottomSheet title="밋업 나우!" onClose={onClose}>
       <div className="ai-preview">
         {selectedSetlogs.map((setlog) => (
           <div key={setlog.id} className={setlog.id === base?.id ? "base" : ""}>
@@ -1835,14 +1869,23 @@ function AiSheet({
           </div>
         ))}
       </div>
+      <div className="credit-panel">
+        <span>크레딧: 10개</span>
+        <strong>사용 시 1개 차감</strong>
+      </div>
       <div className="notice-box">
         <Sparkles size={17} />
-        <span>각자의 로그 순간을 한 장소의 사진처럼 모아요.</span>
+        <span>각자의 셋로그를 한 장소에 실제로 모인 사진처럼 만들어볼까요?</span>
       </div>
-      <button className="accent-button w-full justify-center" onClick={onGenerate} disabled={isGenerating}>
-        <Wand2 size={18} />
-        {isGenerating ? "사진 만드는 중" : "같이 있었던 사진 만들기"}
-      </button>
+      <div className="confirm-actions">
+        <button className="ghost-button" onClick={onClose} disabled={isGenerating}>
+          아니요
+        </button>
+        <button className="accent-button" onClick={onGenerate} disabled={isGenerating}>
+          <Wand2 size={18} />
+          {isGenerating ? "만드는 중" : "예, 만들기"}
+        </button>
+      </div>
     </BottomSheet>
   );
 }
@@ -1963,7 +2006,7 @@ function BottomSheet({ title, onClose, children }: { title: string; onClose: () 
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[22px] font-bold text-ink">{title}</h2>
           <button className="icon-soft" onClick={onClose} aria-label="닫기">
-            <MoreHorizontal size={20} />
+            <X size={20} />
           </button>
         </div>
         <div className="space-y-4">{children}</div>
@@ -2070,7 +2113,7 @@ function normalizeAlbumItems(payload: unknown): AlbumItem[] {
       if (!imageUrl) return null;
       return {
         id: pickString(item, ["id", "_id", "albumItemId", "album_item_id"]) ?? `remote_album_${Math.random().toString(36).slice(2)}`,
-        title: pickString(item, ["title", "name"]) ?? "같이 있었던 장면",
+        title: pickString(item, ["title", "name"]) ?? "밋업 나우!",
         imageUrl,
         sourceSetlogIds: pickStringArray(item, ["sourceSetlogIds", "source_setlog_ids", "setlogIds", "setlog_ids"]) ?? [],
         type: pickString(item, ["type"]) === "setlog_frame" ? "setlog_frame" : "ai_group_photo",

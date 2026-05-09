@@ -144,6 +144,13 @@ type RequestOptions = RequestInit & {
 };
 
 type UnknownRecord = Record<string, unknown>;
+export type ApiError = {
+  code: string;
+  message: string;
+  status?: number;
+};
+
+let lastApiError: ApiError | null = null;
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -344,6 +351,7 @@ async function requestJson<T>(
   options: RequestOptions,
   normalize: (data: unknown) => T | null
 ): Promise<T | null> {
+  lastApiError = null;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const isFormData = options.body instanceof FormData;
@@ -360,12 +368,20 @@ async function requestJson<T>(
       signal: controller.signal
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      lastApiError = await readApiError(response);
+      return null;
+    }
 
     const contentType = response.headers.get("Content-Type") ?? "";
     const data = contentType.includes("application/json") ? await response.json() : await response.text();
     return normalize(data);
-  } catch {
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : "";
+    lastApiError =
+      errorName === "AbortError"
+        ? { code: "REQUEST_TIMEOUT", message: "Request timed out." }
+        : { code: "NETWORK_ERROR", message: "Network request failed." };
     return null;
   } finally {
     window.clearTimeout(timeout);
@@ -373,6 +389,44 @@ async function requestJson<T>(
 }
 
 const jsonBody = (payload: unknown) => JSON.stringify(payload);
+
+async function readApiError(response: Response): Promise<ApiError> {
+  const fallback: ApiError = { code: "HTTP_ERROR", message: "Request failed.", status: response.status };
+  const contentType = response.headers.get("Content-Type") ?? "";
+  if (!contentType.includes("application/json")) return fallback;
+
+  try {
+    const body = await response.json();
+    const error = isRecord(body) ? body.error ?? body.detail : null;
+    if (!isRecord(error)) return fallback;
+
+    return {
+      code: asString(error.code, fallback.code),
+      message: asString(error.message, fallback.message),
+      status: response.status
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+const uploadNameForBlob = (blob: Blob): string => {
+  if (blob instanceof File && blob.name) return blob.name;
+  const contentType = blob.type.split(";", 1)[0];
+  const extension =
+    contentType === "video/mp4"
+      ? "mp4"
+      : contentType === "video/quicktime"
+        ? "mov"
+        : contentType === "image/jpeg"
+          ? "jpg"
+          : contentType === "image/png"
+            ? "png"
+            : contentType === "image/webp"
+              ? "webp"
+              : "webm";
+  return `setlog.${extension}`;
+};
 
 export function buildSetlogUploadFormData(payload: CreateSetlogRequest): FormData {
   const formData = new FormData();
@@ -382,7 +436,7 @@ export function buildSetlogUploadFormData(payload: CreateSetlogRequest): FormDat
     if (key === "topic" || key === "durationSeconds" || key === "moderationProvider") continue;
     if (value === undefined || value === null) continue;
     if (key === "media" && value instanceof Blob) {
-      formData.append("media", value);
+      formData.append("media", value, uploadNameForBlob(value));
       continue;
     }
     formData.append(key, String(value));
@@ -393,6 +447,8 @@ export function buildSetlogUploadFormData(payload: CreateSetlogRequest): FormDat
 }
 
 export const api = {
+  getLastError: () => lastApiError,
+
   login: (userIdOrPayload: string | DemoLoginRequest) => {
     const payload = typeof userIdOrPayload === "string" ? { userId: userIdOrPayload } : userIdOrPayload;
 

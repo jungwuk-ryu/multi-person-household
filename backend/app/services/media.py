@@ -12,6 +12,10 @@ ALLOWED_MEDIA_TYPES = ALLOWED_IMAGE_TYPES | ALLOWED_VIDEO_TYPES
 MAX_UPLOAD_SIZE = 25 * 1024 * 1024
 
 
+def normalize_media_type(content_type: str | None) -> str:
+    return (content_type or "").split(";", 1)[0].strip().lower()
+
+
 def ensure_upload_dirs() -> None:
     base = get_settings().upload_path
     for relative in ("", "seed", "generated", "setlogs"):
@@ -21,12 +25,13 @@ def ensure_upload_dirs() -> None:
 
 
 async def save_upload(file: UploadFile, setlog_id: str) -> str:
-    if file.content_type not in ALLOWED_MEDIA_TYPES:
+    content_type = normalize_media_type(file.content_type)
+    if content_type not in ALLOWED_MEDIA_TYPES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "UNSUPPORTED_MEDIA_TYPE", "message": "Only image and short video uploads are supported."})
     data = await file.read()
     if len(data) > MAX_UPLOAD_SIZE:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "MEDIA_TOO_LARGE", "message": "Uploads must be 25MB or smaller."})
-    suffix = ALLOWED_MEDIA_TYPES[file.content_type]
+    suffix = ALLOWED_MEDIA_TYPES[content_type]
     target = get_settings().upload_path / "setlogs" / f"{setlog_id}{suffix}"
     target.write_bytes(data)
     return f"/uploads/setlogs/{target.name}"
@@ -47,7 +52,7 @@ async def save_url_image(image_url: str) -> str:
         async with httpx.AsyncClient(timeout=5) as client:
             response = await client.get(image_url)
             response.raise_for_status()
-        content_type = response.headers.get("content-type", "").split(";")[0]
+        content_type = normalize_media_type(response.headers.get("content-type"))
         suffix = ALLOWED_IMAGE_TYPES.get(content_type, ".jpg")
         name = f"url-{uuid4().hex}{suffix}"
         target = get_settings().upload_path / "setlogs" / name

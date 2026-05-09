@@ -78,6 +78,18 @@ def test_multipart_setlog_creation():
     assert response.json()["item"]["mediaUrl"].startswith("/uploads/setlogs/")
 
 
+def test_multipart_webm_with_codec_parameter_is_accepted():
+    response = client.post(
+        "/api/setlogs",
+        data={"userId": "u_01", "caption": "Uploaded video", "category": "daily", "visibility": "public", "cityLabel": "성수"},
+        files={"media": ("clip.webm", b"fake webm", "video/webm;codecs=vp9")},
+    )
+    assert response.status_code == 201
+    item = response.json()["item"]
+    assert item["mediaType"] == "video"
+    assert item["mediaUrl"].endswith(".webm")
+
+
 def test_multipart_setlog_blocked_caption_is_rejected():
     with Session(engine) as session:
         before_count = len(session.exec(select(Setlog)).all())
