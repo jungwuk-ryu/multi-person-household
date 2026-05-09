@@ -652,7 +652,7 @@ function App() {
   }, [activeFilter, activeTopic, feedHourOffset, friendIds, setlogs]);
 
   const selectedSetlogs = useMemo(
-    () => approvedSetlogs.filter((setlog) => selectedSetlogIds.includes(setlog.id)),
+    () => selectedSetlogIds.map((id) => approvedSetlogs.find((setlog) => setlog.id === id)).filter((setlog): setlog is Setlog => Boolean(setlog)),
     [approvedSetlogs, selectedSetlogIds]
   );
 
@@ -1398,6 +1398,17 @@ function ConnectionsScreen({
   const targetSetlogs = setlogs
     .filter((setlog) => targetUserIds.includes(setlog.userId))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const ownMeetupSetlogs = setlogs
+    .filter((setlog) => setlog.userId === currentUser.id)
+    .sort((a, b) => {
+      const aVideo = a.mediaType === "video" ? 1 : 0;
+      const bVideo = b.mediaType === "video" ? 1 : 0;
+      if (aVideo !== bVideo) return bVideo - aVideo;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  const meetupSetlogs = [...ownMeetupSetlogs, ...targetSetlogs].filter(
+    (setlog, index, list) => list.findIndex((item) => item.id === setlog.id) === index
+  );
   const playableSetlogs = targetSetlogs;
   const safeSetlogIndex = playableSetlogs.length ? activeSetlogIndex % playableSetlogs.length : 0;
   const heroSetlog = playableSetlogs[safeSetlogIndex];
@@ -1438,7 +1449,7 @@ function ConnectionsScreen({
   }, [heroSetlog?.id, heroSetlog?.mediaUrl, playableSetlogs.length]);
 
   const handleMeetupNow = () => {
-    const ids = targetSetlogs.slice(0, 4).map((setlog) => setlog.id);
+    const ids = meetupSetlogs.slice(0, 4).map((setlog) => setlog.id);
     if (ids.length < 2) return;
     setSelectedSetlogIds(ids);
     setBaseSetlogId(ids[0]);
@@ -1557,7 +1568,7 @@ function ConnectionsScreen({
                     <ImagePlus size={17} />
                     앨범
                   </button>
-                  <button className="viewer-action light" onClick={handleMeetupNow} disabled={targetSetlogs.length < 2}>
+                  <button className="viewer-action light" onClick={handleMeetupNow} disabled={meetupSetlogs.length < 2}>
                     <Sparkles size={17} />
                     밋업 나우!
                   </button>
@@ -2675,7 +2686,11 @@ function AiSheet({
             disabled={isGenerating}
             aria-pressed={setlog.id === base?.id}
           >
-            <img src={setlog.thumbnailUrl} alt={`${getUser(setlog.userId).nickname} 로그`} />
+            {setlog.mediaType === "video" && setlog.mediaUrl ? (
+              <video src={setlog.mediaUrl} poster={setlog.thumbnailUrl} muted loop playsInline autoPlay />
+            ) : (
+              <img src={setlog.thumbnailUrl} alt={`${getUser(setlog.userId).nickname} 로그`} />
+            )}
             <span>{setlog.id === base?.id ? "기준 장소" : getUser(setlog.userId).nickname}</span>
           </button>
         ))}
