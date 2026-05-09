@@ -1,6 +1,6 @@
 const DEFAULT_API_BASE_URL = "";
 const DEFAULT_TIMEOUT_MS = 4500;
-const AI_TIMEOUT_MS = 60000;
+const AI_TIMEOUT_MS = 600000;
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 const shouldUseSameOrigin =

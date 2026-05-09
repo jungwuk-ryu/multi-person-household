@@ -1,6 +1,7 @@
 import base64
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
+import logging
 import mimetypes
 from typing import Any
 import time
@@ -28,6 +29,7 @@ class GroupPhotoSource:
 
 
 DEMO_GENERATED_ASSET_URL = "/uploads/seed/generated-demo.jpg"
+logger = logging.getLogger("uvicorn.error")
 
 
 class ImageGenerationService:
@@ -46,6 +48,13 @@ class ImageGenerationService:
         normalized_sources = self._normalize_sources(sources, base_setlog_id)
         candidate_count = max(1, min(settings.openai_image_parallel_requests, 3))
         prompts = [self._build_prompt(prompt, normalized_sources, candidate_index=index) for index in range(candidate_count)]
+        logger.info(
+            "OpenAI group generation dispatch candidates=%s timeout=%.0fs model=%s base_setlog_id=%s",
+            candidate_count,
+            settings.openai_image_timeout_seconds,
+            settings.openai_image_model,
+            base_setlog_id,
+        )
 
         try:
             result = self._generate_fastest(OpenAI, settings, prompts)
@@ -71,6 +80,14 @@ class ImageGenerationService:
         source_path = self._resolve_upload_path(source_image_url)
         candidate_count = max(1, min(settings.openai_image_parallel_requests, 2))
         prompts = [self._build_style_prompt(prompt, style=style, candidate_index=index) for index in range(candidate_count)]
+        logger.info(
+            "OpenAI image edit dispatch style=%s candidates=%s timeout=%.0fs model=%s source=%s",
+            style,
+            candidate_count,
+            settings.openai_image_timeout_seconds,
+            settings.openai_image_model,
+            source_image_url,
+        )
         try:
             result = self._edit_fastest(OpenAI, settings, source_path, prompts)
         except HTTPException:

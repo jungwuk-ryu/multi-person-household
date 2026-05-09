@@ -5,15 +5,21 @@ const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:30
 const apiProxy = {
   "/api": {
     target: apiProxyTarget,
-    changeOrigin: true
+    changeOrigin: true,
+    timeout: 600000,
+    proxyTimeout: 600000
   },
   "/uploads": {
     target: apiProxyTarget,
-    changeOrigin: true
+    changeOrigin: true,
+    timeout: 600000,
+    proxyTimeout: 600000
   },
   "/ws": {
     target: apiProxyTarget,
     changeOrigin: true,
+    timeout: 600000,
+    proxyTimeout: 600000,
     ws: true
   }
 };

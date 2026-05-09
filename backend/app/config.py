@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     openai_image_model: str = "gpt-image-2"
     openai_image_parallel_requests: int = 2
     openai_image_max_retries: int = 2
-    openai_image_timeout_seconds: float = 45.0
+    openai_image_timeout_seconds: float = 600.0
     gemini_api_key: str = ""
     gemini_moderation_model: str = "gemini-2.5-flash"
     gemini_caption_model: str = "gemini-2.5-flash-lite"

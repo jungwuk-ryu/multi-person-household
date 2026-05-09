@@ -1,3 +1,6 @@
+import logging
+import time
+
 from fastapi import APIRouter, Depends, status
 from sqlmodel import Session, select
 
@@ -9,10 +12,21 @@ from app.services.image_generation import GroupPhotoSource, ImageGenerationServi
 from app.services.moderation import ModerationService
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+logger = logging.getLogger("uvicorn.error")
 
 
 @router.post("/group-photo", response_model=GroupPhotoResponse)
 def generate_group_photo(payload: GroupPhotoRequest, session: Session = Depends(get_session)):
+    request_id = make_id("ai")
+    started_at = time.perf_counter()
+    logger.info(
+        "AI group-photo start request_id=%s user_id=%s source_setlog_ids=%s base_setlog_id=%s persist=%s",
+        request_id,
+        payload.user_id,
+        payload.source_setlog_ids,
+        payload.base_setlog_id,
+        payload.persist,
+    )
     get_user_or_404(session, payload.user_id)
     if len(payload.source_setlog_ids) < 2:
         raise api_error(status.HTTP_400_BAD_REQUEST, "AI_REQUIRES_TWO_SETLOGS", "At least two source Setlogs are required")
@@ -46,7 +60,11 @@ def generate_group_photo(payload: GroupPhotoRequest, session: Session = Depends(
         )
         for item in ordered_setlogs
     ]
-    image_url = ImageGenerationService().generate_group_photo(payload.prompt, sources, base_setlog_id=base_setlog_id)
+    try:
+        image_url = ImageGenerationService().generate_group_photo(payload.prompt, sources, base_setlog_id=base_setlog_id)
+    except Exception:
+        logger.exception("AI group-photo failed request_id=%s elapsed=%.1fs", request_id, time.perf_counter() - started_at)
+        raise
     post_status = ModerationService().moderate(image_url)
     album = None
     response_id = make_id("image")
@@ -56,6 +74,14 @@ def generate_group_photo(payload: GroupPhotoRequest, session: Session = Depends(
         session.commit()
         session.refresh(album)
         response_id = album.id
+    logger.info(
+        "AI group-photo complete request_id=%s image_url=%s album_id=%s status=%s elapsed=%.1fs",
+        request_id,
+        image_url,
+        album.id if album else None,
+        post_status,
+        time.perf_counter() - started_at,
+    )
     return {
         "id": response_id,
         "generated_image_url": image_url,
@@ -68,6 +94,17 @@ def generate_group_photo(payload: GroupPhotoRequest, session: Session = Depends(
 
 @router.post("/memo-photo", response_model=GroupPhotoResponse)
 def generate_memo_photo(payload: MemoPhotoRequest, session: Session = Depends(get_session)):
+    request_id = make_id("ai")
+    started_at = time.perf_counter()
+    logger.info(
+        "AI memo-photo start request_id=%s user_id=%s style=%s source_image_url=%s source_setlog_ids=%s base_setlog_id=%s",
+        request_id,
+        payload.user_id,
+        payload.style,
+        payload.source_image_url,
+        payload.source_setlog_ids,
+        payload.base_setlog_id,
+    )
     get_user_or_404(session, payload.user_id)
     if len(payload.source_setlog_ids) < 2:
         raise api_error(status.HTTP_400_BAD_REQUEST, "AI_REQUIRES_TWO_SETLOGS", "At least two source Setlogs are required")
@@ -84,7 +121,11 @@ def generate_memo_photo(payload: MemoPhotoRequest, session: Session = Depends(ge
     if pre_status == ModerationStatus.blocked:
         raise api_error(status.HTTP_400_BAD_REQUEST, "AI_PROMPT_BLOCKED", "Prompt was blocked by moderation")
 
-    image_url = ImageGenerationService().generate_memo_photo(payload.source_image_url, payload.prompt, style=payload.style)
+    try:
+        image_url = ImageGenerationService().generate_memo_photo(payload.source_image_url, payload.prompt, style=payload.style)
+    except Exception:
+        logger.exception("AI memo-photo failed request_id=%s style=%s elapsed=%.1fs", request_id, payload.style, time.perf_counter() - started_at)
+        raise
     post_status = ModerationService().moderate(image_url)
     album = AlbumItem(
         id=make_id("album"),
@@ -96,6 +137,15 @@ def generate_memo_photo(payload: MemoPhotoRequest, session: Session = Depends(ge
     session.add(album)
     session.commit()
     session.refresh(album)
+    logger.info(
+        "AI memo-photo complete request_id=%s style=%s image_url=%s album_id=%s status=%s elapsed=%.1fs",
+        request_id,
+        payload.style,
+        image_url,
+        album.id,
+        post_status,
+        time.perf_counter() - started_at,
+    )
     return {
         "id": album.id,
         "generated_image_url": image_url,
