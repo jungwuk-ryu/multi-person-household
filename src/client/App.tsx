@@ -29,7 +29,7 @@ import roomChatThumbnail from "./assets/rooms/room-chat.webp";
 import roomMealThumbnail from "./assets/rooms/room-meal.webp";
 import roomWalkThumbnail from "./assets/rooms/room-walk.webp";
 
-type Tab = "feed" | "rooms" | "capture" | "connections";
+type Tab = "feed" | "rooms" | "capture" | "connections" | "more";
 type Filter = "all" | "friends" | "sameGender" | "oppositeGender" | "nearby";
 type ConnectionMode = "friends" | "groups";
 type ConnectionTarget = { type: "friend"; id: string } | { type: "group"; id: string };
@@ -376,7 +376,8 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof Home }> = [
   { id: "feed", label: "피드", icon: Home },
   { id: "rooms", label: "번개", icon: Users },
   { id: "capture", label: "만들기", icon: Camera },
-  { id: "connections", label: "친구", icon: MessageCircle }
+  { id: "connections", label: "친구", icon: MessageCircle },
+  { id: "more", label: "더보기", icon: MoreHorizontal }
 ];
 
 function App() {
@@ -705,6 +706,16 @@ function App() {
               baseSetlogId={baseSetlogId}
               setBaseSetlogId={setBaseSetlogId}
               onOpenAi={() => setSheet("ai")}
+            />
+          )}
+          {activeTab === "more" && (
+            <MoreScreen
+              nickname={nickname}
+              activeFilter={activeFilter}
+              activeTopic={activeTopic}
+              friendCount={friendIds.length}
+              roomCount={rooms.length}
+              albumCount={albumItems.length}
             />
           )}
         </div>
@@ -1306,6 +1317,125 @@ function AlbumScreen({
             </div>
           </article>
         ))}
+      </section>
+    </div>
+  );
+}
+
+function MoreScreen({
+  nickname,
+  activeFilter,
+  activeTopic,
+  friendCount,
+  roomCount,
+  albumCount
+}: {
+  nickname: string;
+  activeFilter: Filter;
+  activeTopic: TopicFilter;
+  friendCount: number;
+  roomCount: number;
+  albumCount: number;
+}) {
+  const filterLabel = filters.find((filter) => filter.id === activeFilter)?.label ?? "전체";
+  const topicLabel = topicFilters.find((topic) => topic.id === activeTopic)?.label ?? "전체";
+
+  return (
+    <div className="more-screen">
+      <section className="more-profile">
+        <div className="more-profile-info">
+          <UserAvatar user={currentUser} className="active more-profile-avatar" />
+          <div className="min-w-0">
+            <h2>{nickname}</h2>
+            <p>{currentUser.cityLabel}에서 오늘의 로그를 남기는 중</p>
+          </div>
+        </div>
+        <button className="ghost-button">
+          프로필 관리
+          <ChevronRight size={16} />
+        </button>
+      </section>
+
+      <section className="more-stats" aria-label="다인가구 사용 현황">
+        <div>
+          <strong>{friendCount}</strong>
+          <span>친구</span>
+        </div>
+        <div>
+          <strong>{roomCount}</strong>
+          <span>번개방</span>
+        </div>
+        <div>
+          <strong>{albumCount}</strong>
+          <span>앨범</span>
+        </div>
+      </section>
+
+      <section className="more-panel">
+        <h3>내 로그 설정</h3>
+        <div className="settings-list">
+          <button className="settings-row">
+            <span className="settings-icon">
+              <MapPin size={18} />
+            </span>
+            <span>
+              <strong>동네 범위</strong>
+              <small>{currentUser.cityLabel}</small>
+            </span>
+            <ChevronRight size={18} />
+          </button>
+          <button className="settings-row">
+            <span className="settings-icon">
+              <Users size={18} />
+            </span>
+            <span>
+              <strong>피드 필터</strong>
+              <small>{filterLabel} · {topicLabel}</small>
+            </span>
+            <ChevronRight size={18} />
+          </button>
+          <button className="settings-row">
+            <span className="settings-icon">
+              <Bell size={18} />
+            </span>
+            <span>
+              <strong>알림</strong>
+              <small>친구 로그와 번개방 참여 알림</small>
+            </span>
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </section>
+
+      <section className="more-panel">
+        <h3>안전과 도움말</h3>
+        <div className="settings-list">
+          <button className="settings-row">
+            <span className="settings-icon coral">
+              <ShieldCheck size={18} />
+            </span>
+            <span>
+              <strong>신고 내역</strong>
+              <small>접수한 신고와 처리 상태</small>
+            </span>
+            <ChevronRight size={18} />
+          </button>
+          <button className="settings-row">
+            <span className="settings-icon coral">
+              <MessageCircle size={18} />
+            </span>
+            <span>
+              <strong>문의하기</strong>
+              <small>서비스 이용 중 불편한 점 보내기</small>
+            </span>
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </section>
+
+      <section className="more-version">
+        <img src={brandLogo} alt="다인가구" />
+        <span>오늘도 함께 기록 중</span>
       </section>
     </div>
   );
