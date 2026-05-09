@@ -1,13 +1,15 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlmodel import Session, select
 
-from app.crud import friend_ids, get_user_or_404, make_id, setlog_out
+from app.crud import api_error, friend_ids, get_user_or_404, make_id, setlog_out
 from app.database import get_session
 from app.models import MediaType, ModerationStatus, Setlog, SetlogCategory, Visibility
 from app.schemas import SetlogCreateResponse, SetlogFromUrlRequest, SetlogsResponse
-from app.services.media import save_upload, save_url_image
+from app.services.media import media_path_from_url, save_upload, save_url_image
 from app.services.moderation import ModerationService
 
 router = APIRouter(prefix="/api/setlogs", tags=["setlogs"])
@@ -47,6 +49,16 @@ def _hour_slot() -> str:
     return datetime.now(timezone.utc).strftime("%H:00")
 
 
+def _delete_saved_media(media_path: Path | None) -> None:
+    if media_path is not None and media_path.exists():
+        media_path.unlink()
+
+
+def _reject_blocked_setlog(media_path: Path | None = None) -> None:
+    _delete_saved_media(media_path)
+    raise api_error(status.HTTP_400_BAD_REQUEST, "SETLOG_REJECTED", "Gemini rejected this Setlog for safety.")
+
+
 @router.post("", response_model=SetlogCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_setlog(
     userId: str = Form(...),
@@ -60,7 +72,19 @@ async def create_setlog(
     user = get_user_or_404(session, userId)
     setlog_id = make_id("setlog")
     media_url = await save_upload(media, setlog_id)
-    moderation = ModerationService().moderate(media.filename, caption)
+    media_path = media_path_from_url(media_url)
+    try:
+        moderation = await ModerationService().moderate_setlog(
+            caption=caption,
+            filename=media.filename,
+            media_path=media_path,
+            mime_type=media.content_type,
+        )
+    except HTTPException:
+        _delete_saved_media(media_path)
+        raise
+    if moderation == ModerationStatus.blocked:
+        _reject_blocked_setlog(media_path)
     media_type = MediaType.video if (media.content_type or "").startswith("video/") else MediaType.image
     setlog = Setlog(id=setlog_id, user_id=user.id, media_type=media_type, media_url=media_url, thumbnail_url=media_url, caption=caption, category=category, visibility=visibility, city_label=cityLabel, hour_slot=_hour_slot(), moderation_status=moderation)
     session.add(setlog)
@@ -74,7 +98,18 @@ async def create_setlog_from_url(payload: SetlogFromUrlRequest, session: Session
     user = get_user_or_404(session, payload.user_id)
     # URL ingestion is best-effort; demos should still work if the remote asset is unavailable.
     media_url = await save_url_image(payload.image_url)
-    moderation = ModerationService().moderate(payload.image_url, payload.caption)
+    media_path = media_path_from_url(media_url)
+    try:
+        moderation = await ModerationService().moderate_setlog(
+            caption=payload.caption,
+            filename=payload.image_url,
+            media_path=media_path,
+        )
+    except HTTPException:
+        _delete_saved_media(media_path)
+        raise
+    if moderation == ModerationStatus.blocked:
+        _reject_blocked_setlog(media_path)
     setlog = Setlog(id=make_id("setlog"), user_id=user.id, media_url=media_url, thumbnail_url=media_url, caption=payload.caption, category=payload.category, visibility=payload.visibility, city_label=payload.city_label, hour_slot=_hour_slot(), moderation_status=moderation)
     session.add(setlog)
     session.commit()

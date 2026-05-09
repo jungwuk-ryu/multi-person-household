@@ -532,43 +532,50 @@ function App() {
 
   const handleUpload = async (capture: RecordedSetlogCapture) => {
     setIsUploading(true);
-    setUploadStatus("업로드 준비 중");
-    const isBlocked = caption.toLowerCase().includes("blocked") || caption.includes("게시불가");
+    setUploadStatus("상태와 영상을 확인 중");
     const topic = inferLogTopic(caption);
-    const newSetlog: Setlog = {
-      id: `s_${Date.now()}`,
+    const createdSetlog = await api.createSetlogFormData({
       userId: currentUser.id,
-      mediaType: "video",
+      caption,
+      visibility,
+      topic,
+      durationSeconds: SETLOG_DURATION_SECONDS,
+      cityLabel: currentUser.cityLabel,
       thumbnailUrl: capture.thumbnailUrl,
-      mediaUrl: capture.videoUrl,
-      caption,
-      visibility,
-      cityLabel: currentUser.cityLabel,
-      gender: currentUser.gender,
-      topic,
-      durationSeconds: SETLOG_DURATION_SECONDS,
-      hourSlot: "20:00",
-      createdAt: new Date().toISOString(),
-      moderationStatus: isBlocked ? "blocked" : "approved",
-      isFriend: true
-    };
-    void api.createSetlogFormData({
-      userId: currentUser.id,
-      caption,
-      visibility,
-      topic,
-      durationSeconds: SETLOG_DURATION_SECONDS,
-      cityLabel: currentUser.cityLabel,
-      thumbnailUrl: newSetlog.thumbnailUrl,
       media: capture.videoBlob,
       moderationProvider: "gemini"
     });
+
+    if (!createdSetlog || createdSetlog.moderationStatus !== "approved") {
+      setUploadStatus("안전 기준에 맞지 않아 올릴 수 없어요");
+      setIsUploading(false);
+      showToast("안전 기준에 맞지 않아 올릴 수 없어요");
+      return;
+    }
+
+    const newSetlog: Setlog = {
+      id: createdSetlog.id,
+      userId: createdSetlog.userId || currentUser.id,
+      mediaType: createdSetlog.mediaType,
+      thumbnailUrl: createdSetlog.thumbnailUrl || capture.thumbnailUrl,
+      mediaUrl: createdSetlog.mediaUrl || capture.videoUrl,
+      caption: createdSetlog.caption || caption,
+      visibility: createdSetlog.visibility,
+      cityLabel: createdSetlog.cityLabel || currentUser.cityLabel,
+      gender: createdSetlog.gender || currentUser.gender,
+      topic: createdSetlog.topic ?? topic,
+      durationSeconds: SETLOG_DURATION_SECONDS,
+      hourSlot: createdSetlog.hourSlot,
+      createdAt: createdSetlog.createdAt,
+      moderationStatus: createdSetlog.moderationStatus,
+      isFriend: true
+    };
     setSetlogs((items) => [newSetlog, ...items]);
-    setUploadStatus(isBlocked ? "게시할 수 없는 로그예요" : "새 로그가 올라갔어요");
+    setUploadStatus("새 로그가 올라갔어요");
     setIsUploading(false);
     setSheet(null);
     setActiveTab("feed");
-    showToast(isBlocked ? "게시할 수 없는 로그예요" : "다인가구에 로그가 올라갔어요");
+    showToast("다인가구에 로그가 올라갔어요");
   };
 
   const handleCreateRoom = async () => {

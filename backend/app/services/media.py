@@ -32,6 +32,16 @@ async def save_upload(file: UploadFile, setlog_id: str) -> str:
     return f"/uploads/setlogs/{target.name}"
 
 
+def media_path_from_url(media_url: str) -> Path | None:
+    if not media_url.startswith("/uploads/"):
+        return None
+    base = get_settings().upload_path.resolve()
+    target = (base / media_url.removeprefix("/uploads/")).resolve()
+    if base not in target.parents and target != base:
+        return None
+    return target
+
+
 async def save_url_image(image_url: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=5) as client:

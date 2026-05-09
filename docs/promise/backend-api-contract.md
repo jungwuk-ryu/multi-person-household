@@ -163,7 +163,7 @@ Response:
 }
 ```
 
-Blocked Setlogs must not appear in feed responses.
+Rejected Setlogs must not appear in feed responses.
 
 ### POST /api/setlogs
 
@@ -174,11 +174,11 @@ Multipart form data:
 - `category`: `meal | daily | exercise | hobby | other`
 - `visibility`: `public | friends`
 - `cityLabel`: string
-- `media`: image file
+- `media`: image or short video file
 
-First MVP accepts image uploads only. Allowed MIME types are `image/jpeg`, `image/png`, `image/webp`, and `image/gif`. Maximum file size is 10MB. Video may remain reserved in backend schema, but frontend should not depend on video upload until the contract is updated.
+Allowed MIME types are `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `video/mp4`, `video/webm`, and `video/quicktime`. Maximum file size is 25MB.
 
-Successful create responses use `201 Created` for both approved and blocked moderation outcomes. Blocked Setlogs are persisted and returned from create requests, but never returned by feed endpoints.
+Successful create responses use `201 Created` only for Gemini-approved outcomes. Rejected Setlogs return `400 Bad Request` with `SETLOG_REJECTED`; uploaded media is removed and the Setlog is not persisted.
 
 Response:
 
@@ -505,10 +505,11 @@ Backend must pre-moderate approved source Setlogs, generate or mock the image, p
 
 When `MOCK_AI=true`:
 
-- Moderation returns `approved` unless filename, imageUrl, or caption contains `blocked`.
-- If blocked, create responses use `201 Created` with `moderationStatus: "blocked"` and feeds must not return the item.
+- If `GEMINI_API_KEY` is configured, Setlog creation checks the caption and uploaded image/video with Gemini before persistence.
+- Without `GEMINI_API_KEY`, moderation uses the deterministic demo fallback and rejects filename, imageUrl, or caption containing `blocked`.
+- Rejected create responses use `400 Bad Request` with `SETLOG_REJECTED`, and feeds must not return the item.
 - AI group photo returns `/uploads/seed/generated-demo.jpg`.
-- No OpenAI or Gemini keys are required.
+- OpenAI and Gemini keys are optional for local tests, but Gemini is required for real media safety checks.
 
 ## WebSocket Contract
 
@@ -657,6 +658,6 @@ Startup seeding is idempotent:
 - Use `user-mina` as the default current user.
 - Treat `mediaUrl` and `avatarUrl` as directly renderable URLs.
 - For local media, prefix with backend base URL when needed.
-- Do not render blocked Setlogs in feed; backend should already exclude them.
+- Do not render rejected Setlogs in feed; backend should reject them before persistence.
 - Flash meet expiration is server-owned.
 - The frontend can start with this contract before backend implementation is complete.

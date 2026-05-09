@@ -419,7 +419,7 @@ export const api = {
       {
         method: "POST",
         body: payload instanceof FormData ? payload : jsonBody(payload),
-        timeoutMs: 9000
+        timeoutMs: 35000
       },
       (data) => normalizeSetlog(unwrap(data, "item", "setlog", "data"))
     ),

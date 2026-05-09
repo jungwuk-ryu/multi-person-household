@@ -35,10 +35,10 @@ Expected result:
 - `GET /api/setlogs?filter=oppositeGender&userId=u_01` includes opposite-gender approved public logs.
 - `GET /api/setlogs?filter=nearby&userId=u_01` returns approved public logs from the same `cityLabel`.
 - `GET /api/setlogs?filter=meal&userId=u_01` returns approved public meal logs only.
-- `POST /api/setlogs` accepts multipart image uploads and returns `201 Created`.
+- `POST /api/setlogs` accepts multipart image or short video uploads and returns `201 Created` only after moderation approval.
 - `POST /api/setlogs/from-url` stores a remote image when possible, or keeps the original URL when fetch fails.
-- Log creation with `blocked` in caption, filename, or image URL returns `moderationStatus=blocked`.
-- Blocked logs are persisted but never returned by feed endpoints.
+- Log creation with unsafe caption, filename, image, or video content returns `400 SETLOG_REJECTED`.
+- Rejected logs are not persisted and uploaded media is removed.
 - `GET /api/flash-meets?userId=u_01` returns active, non-expired flash meets only.
 - `POST /api/flash-meets` accepts `expiresInHours` values `1`, `2`, or `3`.
 - `POST /api/flash-meets/{id}/join` returns `chatRoomId`.

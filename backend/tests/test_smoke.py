@@ -1,4 +1,6 @@
-from pathlib import Path
+import os
+
+os.environ["GEMINI_API_KEY"] = ""
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -46,6 +48,8 @@ def test_setlog_filters_and_blocked_seed_exclusion():
 
 
 def test_url_setlog_creation_and_mock_moderation_blocked_exclusion():
+    with Session(engine) as session:
+        before_count = len(session.exec(select(Setlog)).all())
     response = client.post(
         "/api/setlogs/from-url",
         json={
@@ -57,11 +61,11 @@ def test_url_setlog_creation_and_mock_moderation_blocked_exclusion():
             "imageUrl": "https://example.invalid/blocked.jpg",
         },
     )
-    assert response.status_code == 201
-    item = response.json()["item"]
-    assert item["moderationStatus"] == "blocked"
-    feed_ids = {entry["id"] for entry in client.get("/api/setlogs", params={"filter": "all", "userId": "u_01"}).json()["items"]}
-    assert item["id"] not in feed_ids
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "SETLOG_REJECTED"
+    with Session(engine) as session:
+        after_count = len(session.exec(select(Setlog)).all())
+    assert after_count == before_count
 
 
 def test_multipart_setlog_creation():
@@ -72,6 +76,21 @@ def test_multipart_setlog_creation():
     )
     assert response.status_code == 201
     assert response.json()["item"]["mediaUrl"].startswith("/uploads/setlogs/")
+
+
+def test_multipart_setlog_blocked_caption_is_rejected():
+    with Session(engine) as session:
+        before_count = len(session.exec(select(Setlog)).all())
+    response = client.post(
+        "/api/setlogs",
+        data={"userId": "u_01", "caption": "blocked upload", "category": "meal", "visibility": "public", "cityLabel": "성수"},
+        files={"media": ("blocked.jpg", b"fake image", "image/jpeg")},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "SETLOG_REJECTED"
+    with Session(engine) as session:
+        after_count = len(session.exec(select(Setlog)).all())
+    assert after_count == before_count
 
 
 def test_flash_meet_join_and_self_join_error():
