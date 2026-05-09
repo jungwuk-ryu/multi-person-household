@@ -32,7 +32,9 @@ The app is designed for mobile-first use. On desktop, the UI should remain const
 
 ## API Configuration
 
-Default server API base:
+By default, the client calls same-origin `/api`, `/uploads`, and `/ws`. This avoids browser mixed-content blocking when the app is opened through an HTTPS Cloudflare Tunnel.
+
+Default Vite proxy target:
 
 ```text
 http://131.186.62.191:3021
@@ -47,8 +49,11 @@ cp .env.example .env
 Then edit:
 
 ```bash
-VITE_API_BASE_URL=http://131.186.62.191:3021
+VITE_API_BASE_URL=
+VITE_API_PROXY_TARGET=http://131.186.62.191:3021
 ```
+
+Only set `VITE_API_BASE_URL` to a full URL when that API URL is also HTTPS, such as `https://api.example.com`.
 
 The remote server may be unavailable during demo or local development. The frontend is expected to remain demoable with mock fallback data and mock AI/moderation results when the server or API keys are not reachable.
 

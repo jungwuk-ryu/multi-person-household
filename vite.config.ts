@@ -1,6 +1,23 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || "http://131.186.62.191:3021";
+const apiProxy = {
+  "/api": {
+    target: apiProxyTarget,
+    changeOrigin: true
+  },
+  "/uploads": {
+    target: apiProxyTarget,
+    changeOrigin: true
+  },
+  "/ws": {
+    target: apiProxyTarget,
+    changeOrigin: true,
+    ws: true
+  }
+};
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -16,12 +33,14 @@ export default defineConfig({
         "https://gdg.jungwuk.com"
       ],
       credentials: true
-    }
+    },
+    proxy: apiProxy
   },
   preview: {
     host: "0.0.0.0",
     port: 5173,
     strictPort: true,
-    allowedHosts: ["gdg.jungwuk.com", "131.186.62.191"]
+    allowedHosts: ["gdg.jungwuk.com", "131.186.62.191"],
+    proxy: apiProxy
   }
 });

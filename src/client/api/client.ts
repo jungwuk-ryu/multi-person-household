@@ -1,10 +1,14 @@
-const DEFAULT_API_BASE_URL = "http://131.186.62.191:3021";
+const DEFAULT_API_BASE_URL = "";
 const DEFAULT_TIMEOUT_MS = 4500;
 const AI_TIMEOUT_MS = 20000;
 
-export const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
-).replace(/\/+$/, "");
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL;
+const shouldUseSameOrigin =
+  typeof window !== "undefined" &&
+  window.location.protocol === "https:" &&
+  configuredApiBaseUrl.startsWith("http://");
+
+export const API_BASE_URL = (shouldUseSameOrigin ? "" : configuredApiBaseUrl).replace(/\/+$/, "");
 
 const toApiAssetUrl = (value: string) => {
   if (!value) return value;
