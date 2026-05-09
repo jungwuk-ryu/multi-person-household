@@ -1518,6 +1518,183 @@ img {
     animation: sheetIn 190ms ease-out;
   }
 
+  .safety-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 55;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 22px;
+    background:
+      radial-gradient(circle at 50% 18%, rgba(46, 212, 122, 0.22), transparent 32%),
+      rgba(17, 17, 17, 0.42);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+  }
+
+  .safety-modal {
+    position: relative;
+    width: min(100%, 360px);
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 30px;
+    background: rgba(255, 255, 255, 0.84);
+    padding: 22px;
+    box-shadow: 0 22px 60px rgba(17, 17, 17, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+    -webkit-backdrop-filter: blur(26px) saturate(155%);
+    backdrop-filter: blur(26px) saturate(155%);
+    animation: safetyIn 180ms ease-out;
+  }
+
+  .safety-modal::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(140deg, rgba(46, 212, 122, 0.2), transparent 32%),
+      linear-gradient(320deg, rgba(255, 90, 102, 0.16), transparent 36%);
+    pointer-events: none;
+  }
+
+  .safety-modal > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .safety-orb {
+    width: 66px;
+    height: 66px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.68);
+    border-radius: 24px;
+    background: rgba(46, 212, 122, 0.16);
+    color: var(--setlog-green);
+    box-shadow: var(--shadow-glass);
+    -webkit-backdrop-filter: blur(18px) saturate(145%);
+    backdrop-filter: blur(18px) saturate(145%);
+  }
+
+  .safety-copy {
+    margin-top: 18px;
+  }
+
+  .safety-copy > span {
+    color: var(--setlog-coral);
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .safety-copy h2 {
+    margin-top: 5px;
+    color: var(--setlog-ink);
+    font-size: 26px;
+    line-height: 1.12;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+
+  .safety-copy p {
+    margin-top: 10px;
+    color: var(--setlog-muted);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.48;
+    word-break: keep-all;
+  }
+
+  .safety-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  .safety-grid article {
+    min-height: 150px;
+    border: 1px solid var(--glass-line);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.54);
+    padding: 12px;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+  }
+
+  .safety-icon {
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(46, 212, 122, 0.14);
+    color: var(--setlog-green);
+  }
+
+  .safety-icon.coral {
+    background: rgba(255, 236, 239, 0.84);
+    color: var(--setlog-coral);
+  }
+
+  .safety-grid strong {
+    display: block;
+    margin-top: 10px;
+    color: var(--setlog-ink);
+    font-size: 14px;
+    font-weight: 900;
+  }
+
+  .safety-grid p {
+    margin-top: 5px;
+    color: var(--setlog-muted);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.38;
+    word-break: keep-all;
+  }
+
+  .safety-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 12px;
+    border: 1px solid rgba(46, 212, 122, 0.22);
+    border-radius: 999px;
+    background: rgba(46, 212, 122, 0.12);
+    padding: 10px 12px;
+    color: var(--setlog-green);
+  }
+
+  .safety-status div {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .safety-status span {
+    overflow: hidden;
+    color: var(--setlog-ink);
+    font-size: 12px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .safety-status strong {
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .safety-close {
+    width: 100%;
+    justify-content: center;
+    margin-top: 16px;
+  }
+
   .sheet-handle {
     width: 36px;
     height: 5px;
@@ -1898,6 +2075,17 @@ img {
   }
   to {
     transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes safetyIn {
+  from {
+    transform: translateY(10px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }

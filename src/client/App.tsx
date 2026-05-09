@@ -425,6 +425,7 @@ function App() {
   const [reportTargetId, setReportTargetId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState<ReportReason>("inappropriate");
   const [reportDetail, setReportDetail] = useState("");
+  const [isSafetyOpen, setIsSafetyOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -672,6 +673,7 @@ function App() {
           setLoginName={setLoginName}
           isLoggedIn={isLoggedIn}
           onDemoLogin={handleDemoLogin}
+          onSafetyClick={() => setIsSafetyOpen(true)}
         />
         <div className="screen-scroll">
           {activeTab === "feed" && (
@@ -764,6 +766,7 @@ function App() {
             onSubmit={handleSubmitReport}
           />
         )}
+        {isSafetyOpen && <SafetyModal onClose={() => setIsSafetyOpen(false)} />}
         {toast && <div className="toast">{toast}</div>}
       </section>
     </main>
@@ -775,13 +778,15 @@ function AppHeader({
   loginName,
   setLoginName,
   isLoggedIn,
-  onDemoLogin
+  onDemoLogin,
+  onSafetyClick
 }: {
   nickname: string;
   loginName: string;
   setLoginName: (name: string) => void;
   isLoggedIn: boolean;
   onDemoLogin: () => void;
+  onSafetyClick: () => void;
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-black/[0.04] bg-white/85 px-4 pb-3 pt-4 backdrop-blur-[18px]">
@@ -790,7 +795,7 @@ function AppHeader({
           <img className="brand-logo" src={brandLogo} alt="다인가구" />
         </div>
         <div className="flex items-center gap-2">
-          <IconButton label="안전 상태">
+          <IconButton label="안전 상태" onClick={onSafetyClick}>
             <ShieldCheck size={20} />
           </IconButton>
           <IconButton label="알림">
@@ -1907,6 +1912,52 @@ function ReportSheet({
   );
 }
 
+function SafetyModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="safety-backdrop" role="presentation" onClick={onClose}>
+      <section className="safety-modal" role="dialog" aria-modal="true" aria-label="다인가구 안전 안내" onClick={(event) => event.stopPropagation()}>
+        <div className="safety-orb">
+          <ShieldCheck size={30} />
+        </div>
+        <div className="safety-copy">
+          <span>Gemini 보호 모드</span>
+          <h2>채팅과 이미지를 꼼꼼하게 확인하고 있어요</h2>
+          <p>다인가구는 대화, 사진, 영상 로그, 신고 흐름을 함께 살펴서 혼자 사는 사람들이 안심하고 연결될 수 있도록 지켜요.</p>
+        </div>
+
+        <div className="safety-grid">
+          <article>
+            <span className="safety-icon">
+              <MessageCircle size={18} />
+            </span>
+            <strong>채팅 확인</strong>
+            <p>불쾌한 말투, 만남 강요, 개인정보 요청처럼 위험한 흐름을 세심하게 살펴요.</p>
+          </article>
+          <article>
+            <span className="safety-icon coral">
+              <ImagePlus size={18} />
+            </span>
+            <strong>이미지 확인</strong>
+            <p>사진과 영상 로그에서 민감하거나 불편한 장면이 보이면 노출을 막을 수 있어요.</p>
+          </article>
+        </div>
+
+        <div className="safety-status">
+          <div>
+            <Sparkles size={18} />
+            <span>오늘 올라온 로그를 실시간으로 살피는 중</span>
+          </div>
+          <strong>안전</strong>
+        </div>
+
+        <button className="primary-button safety-close" onClick={onClose}>
+          확인했어요
+        </button>
+      </section>
+    </div>
+  );
+}
+
 function BottomSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="sheet-backdrop" role="presentation" onClick={onClose}>
@@ -1924,9 +1975,9 @@ function BottomSheet({ title, onClose, children }: { title: string; onClose: () 
   );
 }
 
-function IconButton({ label, children }: { label: string; children: React.ReactNode }) {
+function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
   return (
-    <button className="icon-button" aria-label={label}>
+    <button className="icon-button" aria-label={label} onClick={onClick}>
       {children}
     </button>
   );
