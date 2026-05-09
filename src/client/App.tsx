@@ -421,7 +421,7 @@ function App() {
   const [baseSetlogId, setBaseSetlogId] = useState("s_04");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState("새 로그를 준비 중이에요");
+  const [uploadStatus, setUploadStatus] = useState("");
   const [reportTargetId, setReportTargetId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState<ReportReason>("inappropriate");
   const [reportDetail, setReportDetail] = useState("");
@@ -1588,16 +1588,12 @@ function UploadSheet({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const stopTimerRef = useRef<number | null>(null);
-  const countdownTimerRef = useRef<number | null>(null);
   const [cameraState, setCameraState] = useState<"requesting" | "ready" | "recording" | "recorded" | "denied" | "unsupported">("requesting");
-  const [remainingSeconds, setRemainingSeconds] = useState(SETLOG_DURATION_SECONDS);
   const [capture, setCapture] = useState<RecordedSetlogCapture | null>(null);
 
   const stopTimers = () => {
     if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
-    if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current);
     stopTimerRef.current = null;
-    countdownTimerRef.current = null;
   };
 
   const stopCamera = () => {
@@ -1628,7 +1624,6 @@ function UploadSheet({
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => undefined);
       }
-      setRemainingSeconds(SETLOG_DURATION_SECONDS);
       setCameraState("ready");
     } catch {
       setCameraState("denied");
@@ -1681,19 +1676,12 @@ function UploadSheet({
       const thumbnailUrl = captureThumbnail();
       setCapture({ videoBlob, videoUrl, thumbnailUrl });
       setCameraState("recorded");
-      setRemainingSeconds(SETLOG_DURATION_SECONDS);
       stopCamera();
     };
 
-    const startedAt = Date.now();
     setCapture(null);
-    setRemainingSeconds(SETLOG_DURATION_SECONDS);
     setCameraState("recording");
     recorder.start();
-    countdownTimerRef.current = window.setInterval(() => {
-      const remainingMs = SETLOG_DURATION_SECONDS * 1000 - (Date.now() - startedAt);
-      setRemainingSeconds(Math.max(0, Math.ceil(remainingMs / 1000)));
-    }, 160);
     stopTimerRef.current = window.setTimeout(() => {
       if (recorder.state === "recording") recorder.stop();
     }, SETLOG_DURATION_SECONDS * 1000);
@@ -1701,11 +1689,11 @@ function UploadSheet({
 
   const previewLabel =
     cameraState === "recording"
-      ? `${remainingSeconds}초`
+      ? "녹화 중"
       : cameraState === "recorded"
         ? "녹화 완료"
         : cameraState === "ready"
-          ? "4초 고정"
+          ? "카메라 준비"
           : "카메라 준비";
 
   const helperText =
@@ -1716,13 +1704,13 @@ function UploadSheet({
         : cameraState === "unsupported"
           ? "이 브라우저에서는 카메라 녹화를 지원하지 않아요."
           : cameraState === "recording"
-            ? "녹화 중이에요. 4초 뒤 자동으로 멈춰요."
+            ? "녹화 중이에요."
             : cameraState === "recorded"
               ? "녹화된 로그를 올릴 수 있어요."
-              : "버튼을 누르면 4초 로그가 녹화돼요.";
+              : "버튼을 눌러 로그를 남겨보세요.";
 
   return (
-    <BottomSheet title="4초 로그 찍기" onClose={onClose}>
+    <BottomSheet title="로그 찍기" onClose={onClose}>
       <div className="upload-preview camera-preview">
         {capture ? (
           <video src={capture.videoUrl} poster={capture.thumbnailUrl} controls playsInline />
@@ -1738,7 +1726,7 @@ function UploadSheet({
           disabled={cameraState === "requesting" || cameraState === "unsupported" || cameraState === "recording"}
         >
           <Camera size={18} />
-          {cameraState === "recorded" ? "다시 찍기" : cameraState === "recording" ? "녹화 중" : "녹화 시작"}
+          {cameraState === "recorded" ? "다시 찍기" : cameraState === "recording" ? "촬영 중" : "촬영 시작"}
         </button>
         <span className="camera-state">{helperText}</span>
       </div>
@@ -1749,10 +1737,12 @@ function UploadSheet({
         <button className={visibility === "public" ? "active" : ""} onClick={() => setVisibility("public")}>공개</button>
         <button className={visibility === "friends" ? "active" : ""} onClick={() => setVisibility("friends")}>친구만</button>
       </div>
-      <div className="notice-box">
-        <ShieldCheck size={17} />
-        <span>{uploadStatus}</span>
-      </div>
+      {isUploading && uploadStatus && (
+        <div className="notice-box">
+          <ShieldCheck size={17} />
+          <span>{uploadStatus}</span>
+        </div>
+      )}
       <button className="primary-button" onClick={() => capture && onSubmit(capture)} disabled={isUploading || !capture || cameraState === "recording"}>
         <ShieldCheck size={18} />
         {isUploading ? "올리는 중" : "다인가구에 올리기"}

@@ -1441,9 +1441,9 @@ img {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     align-items: end;
-    gap: 3px;
+    gap: 8px;
     min-height: calc(84px + env(safe-area-inset-bottom));
-    padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
+    padding: 8px 14px calc(10px + env(safe-area-inset-bottom));
     border-top: 1px solid rgba(255, 255, 255, 0.62);
     background: rgba(255, 255, 255, 0.68);
     box-shadow: 0 -10px 34px rgba(17, 17, 17, 0.08);
@@ -1462,9 +1462,13 @@ img {
   }
 
   .nav-item {
+    width: 100%;
+    max-width: 58px;
+    justify-self: center;
     flex-direction: column;
     gap: 4px;
     border-radius: 18px;
+    padding: 6px 4px;
     font-size: 11px;
     font-weight: 900;
   }
