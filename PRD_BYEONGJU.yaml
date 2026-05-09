@@ -1,0 +1,121 @@
+goal: Build an MVP neighborhood community matching app for single-person households
+  that reduces loneliness by matching users into local small rooms where they share
+  short real-time daily video logs and feel each other's presence.
+task_type: code
+brownfield_context:
+  project_type: greenfield
+  context_references:
+    - Setlog-style real-time shared daily logging
+  existing_patterns:
+    - FastAPI backend
+    - React/Vite frontend
+    - Local mock-first hackathon demo flow
+  existing_dependencies:
+    - FastAPI
+    - Pydantic
+    - React
+    - Vite
+constraints:
+  - Anonymous identity only.
+  - Do not expose real names.
+  - Do not expose exact locations.
+  - Match by dong-level or living-area-level location.
+  - Match by lifestyle context and rhythm such as eating alone, walking, after-work talk, weekend local activity, or staying-home check-in.
+  - Videos are visible only to room participants.
+  - Daily logs must be short 2-4 second raw everyday videos.
+  - Safety checks use warning, blur, upload restriction, and reporting flows rather than relying on guaranteed automatic blocking.
+  - Room cards must start from default templates and be customizable by the room host.
+  - Existing friends can enter through an invitation link or code.
+acceptance_criteria:
+  - User can enter through neighborhood/lifestyle-rhythm room recommendation or friend invitation link.
+  - User can inspect a thumbnail or room card before joining.
+  - Room card shows room mood and lifestyle context.
+  - Host can select a default room template.
+  - Host can adjust room copy, lifestyle tags, and thumbnail mood.
+  - At least 2 users can join the same room.
+  - A participant can upload at least one 2-4 second daily log.
+  - Room participants can view each other's logs inside the room.
+  - The app does not reveal real names or exact locations during the flow.
+  - Safety review states can display warning, blur, upload restriction, and report handling.
+  - MVP matching success can occur within about 3 minutes from app entry.
+ontology_schema:
+  name: NeighborhoodDailyLogRoom
+  description: Domain model for anonymous neighborhood-based small rooms where single-person household users match by local lifestyle rhythm and share short daily video logs for loneliness relief.
+  fields:
+    - name: user_id
+      type: string
+      description: Anonymous user identifier.
+      required: true
+    - name: neighborhood_area
+      type: string
+      description: Dong-level or living-area-level matching area without exact location.
+      required: true
+    - name: lifestyle_contexts
+      type: array
+      description: Selected life situations or rhythms used for matching.
+      required: true
+    - name: room_id
+      type: string
+      description: Unique small-room identifier.
+      required: true
+    - name: room_card
+      type: object
+      description: Template-based room presentation including copy, tags, and thumbnail mood.
+      required: true
+    - name: invite_link
+      type: string
+      description: Friend invitation entry link or code for a room.
+      required: true
+    - name: participants
+      type: array
+      description: Anonymous users currently in the room.
+      required: true
+    - name: daily_log
+      type: object
+      description: Uploaded 2-4 second everyday video log visible only inside the room.
+      required: true
+    - name: safety_review
+      type: object
+      description: Inspection result used for warning, blur, upload restriction, or report handling.
+      required: true
+    - name: match_success
+      type: boolean
+      description: Whether the user reached a shared room and exchanged visible daily logs.
+      required: true
+evaluation_principles:
+  - name: LonelinessRelief
+    description: Prioritize fast access to real nearby presence and lightweight shared daily experience.
+    weight: 0.3
+  - name: PrivacySafety
+    description: Protect anonymity, avoid precise location or real identity exposure, and provide practical media safety safeguards.
+    weight: 0.25
+  - name: MVPFlowCompleteness
+    description: Ensure the full demo path from recommendation or invite to room join, upload, and viewing works end to end.
+    weight: 0.25
+  - name: RoomExpressiveness
+    description: Room cards and thumbnails should clearly communicate atmosphere and lifestyle context before entry.
+    weight: 0.1
+  - name: ReferenceAlignment
+    description: Preserve the Setlog-inspired real-time short raw daily log and shared vlog/log concept.
+    weight: 0.1
+exit_conditions:
+  - name: SeedReady
+    description: Structured product direction is complete enough for implementation planning.
+    criteria: Goal, constraints, acceptance criteria, ontology, evaluation principles, and exit conditions are concrete.
+  - name: MVPFlowDefined
+    description: Core success flow is unambiguous.
+    criteria: Recommendation or invite to room card review to 2+ participants to 2-4 second log upload to in-room mutual viewing.
+  - name: SafetyBoundaryDefined
+    description: Privacy and content-safety constraints are explicit.
+    criteria: Anonymous identity, area-level matching, room-only video visibility, and warning/blur/upload restriction/report safety flow.
+metadata:
+  seed_id: seed_cb692113eb2e
+  version: 1.0.0
+  created_at: "2026-05-09T02:17:36.994788Z"
+  ambiguity_score: 0.161
+  interview_id: interview_20260509_020551
+  parent_seed_id: null
+  open_questions:
+    - Decide whether the hackathon MVP uses real video upload or mock 2-4 second log cards.
+    - Decide whether Google media safety APIs are called live or represented by mock safety review states.
+    - Decide the small-room participant cap for the first demo.
