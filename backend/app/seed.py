@@ -15,7 +15,7 @@ LEGACY_SEED_IDS = {
     FlashMeet: ["flash-coffee-001", "flash-meal-001", "flash-expired-001"],
     ChatRoom: ["chat-mina-jun"],
     ChatMessage: ["msg-mina-jun-001", "msg-jun-mina-001"],
-    AlbumItem: ["album-mina-group-001"],
+    AlbumItem: ["album-mina-group-001", "a_01"],
 }
 
 
@@ -52,11 +52,11 @@ def seed_database(session: Session) -> None:
         _upsert_seed(session, User, user)
 
     setlogs = [
-        Setlog(id="s_01", user_id="u_02", media_type=MediaType.video, media_url="/uploads/seed/IMG_9563.mp4", thumbnail_url="/uploads/seed/IMG_9563.jpg", caption="집에서 토끼옷 입고 혼자 춤추는 중ㅋㅋ", category="chat", visibility="public", city_label="성수", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=60), moderation_status=ModerationStatus.approved),
-        Setlog(id="s_02", user_id="u_04", media_type=MediaType.video, media_url="/uploads/seed/IMG_9183.mp4", thumbnail_url="/uploads/seed/IMG_9183.jpg", caption="모래언덕에서 ATV 타니까 속이 뻥 뚫린다", category="walk", visibility="public", city_label="성수", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=57), moderation_status=ModerationStatus.approved),
-        Setlog(id="s_03", user_id="u_03", media_type=MediaType.video, media_url="/uploads/seed/IMG_8211.mp4", thumbnail_url="/uploads/seed/IMG_8211.jpg", caption="예쁜 칵테일 한 잔으로 오늘 마무리", category="chat", visibility="public", city_label="뚝섬", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=53), moderation_status=ModerationStatus.approved),
-        Setlog(id="s_04", user_id="u_01", media_type=MediaType.video, media_url="/uploads/seed/IMG_9255.mp4", thumbnail_url="/uploads/seed/IMG_9255.jpg", caption="빨간 등대 보면서 바람 쐬는 중", category="walk", visibility="friends", city_label="성수", hour_slot="19:00", created_at=BASE_TIME - timedelta(minutes=98), moderation_status=ModerationStatus.approved),
-        Setlog(id="s_05", user_id="u_02", media_type=MediaType.video, media_url="/uploads/seed/IMG_4444.mp4", thumbnail_url="/uploads/seed/IMG_4444.jpg", caption="숯불에 고기 굽는 냄새 미쳤다... 같이 먹을 사람", category="meal", visibility="public", city_label="성수", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=48), moderation_status=ModerationStatus.approved),
+        Setlog(id="s_01", user_id="u_02", media_type=MediaType.video, media_url="/uploads/seed/IMG_9563.mp4", thumbnail_url="/uploads/seed/IMG_9563.jpg", caption="집에서 토끼옷 입고 혼자 춤추는 중ㅋㅋ", category="chat", visibility="public", city_label="성수", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=60), moderation_status=ModerationStatus.approved, like_count=12),
+        Setlog(id="s_02", user_id="u_04", media_type=MediaType.video, media_url="/uploads/seed/IMG_9183.mp4", thumbnail_url="/uploads/seed/IMG_9183.jpg", caption="모래언덕에서 ATV 타니까 속이 뻥 뚫린다", category="walk", visibility="public", city_label="성수", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=57), moderation_status=ModerationStatus.approved, like_count=8),
+        Setlog(id="s_03", user_id="u_03", media_type=MediaType.video, media_url="/uploads/seed/IMG_8211.mp4", thumbnail_url="/uploads/seed/IMG_8211.jpg", caption="예쁜 칵테일 한 잔으로 오늘 마무리", category="chat", visibility="public", city_label="뚝섬", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=53), moderation_status=ModerationStatus.approved, like_count=5),
+        Setlog(id="s_04", user_id="u_01", media_type=MediaType.video, media_url="/uploads/seed/IMG_9255.mp4", thumbnail_url="/uploads/seed/IMG_9255.jpg", caption="빨간 등대 보면서 바람 쐬는 중", category="walk", visibility="friends", city_label="성수", hour_slot="19:00", created_at=BASE_TIME - timedelta(minutes=98), moderation_status=ModerationStatus.approved, like_count=9),
+        Setlog(id="s_05", user_id="u_02", media_type=MediaType.video, media_url="/uploads/seed/IMG_4444.mp4", thumbnail_url="/uploads/seed/IMG_4444.jpg", caption="숯불에 고기 굽는 냄새 미쳤다... 같이 먹을 사람", category="meal", visibility="public", city_label="성수", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=48), moderation_status=ModerationStatus.approved, like_count=18),
         Setlog(id="s_blocked_01", user_id="u_04", media_type=MediaType.image, media_url="/uploads/seed/IMG_8211.jpg", thumbnail_url="/uploads/seed/IMG_8211.jpg", caption="blocked seed content", category="chat", visibility="public", city_label="성수", hour_slot="17:00", created_at=BASE_TIME - timedelta(hours=5), moderation_status=ModerationStatus.blocked),
     ]
     for setlog in setlogs:
@@ -74,6 +74,7 @@ def seed_database(session: Session) -> None:
         FlashMeet(id="r_01", creator_id="u_04", type="meal", message="이따 저녁 같이 먹을 사람!!! 성수 근처면 바로 ㄱㄱ", city_label="성수", expires_at=now + timedelta(minutes=42), participant_ids=["u_04", "u_02", "u_01"], status=FlashMeetStatus.active),
         FlashMeet(id="r_02", creator_id="u_02", type="cafe", message="퇴근했는데 집 가기 아쉬운 사람? 카페에서 수다 ㄱ", city_label="성수", expires_at=now + timedelta(minutes=74), participant_ids=["u_02", "u_04"], status=FlashMeetStatus.active),
         FlashMeet(id="r_03", creator_id="u_03", type="walk", message="뚝섬 산책 갈 사람 있음?? 20분만 걷자", city_label="뚝섬", expires_at=now + timedelta(minutes=31), participant_ids=["u_03", "u_01"], status=FlashMeetStatus.active),
+        FlashMeet(id="r_04", creator_id="u_02", type="other", message="지금 할 일은 없는데 잠깐 떠들 사람 있나요", city_label="성수", expires_at=now + timedelta(minutes=58), participant_ids=["u_02"], status=FlashMeetStatus.active),
     ]:
         _upsert_seed(session, FlashMeet, meet)
 
@@ -90,5 +91,4 @@ def seed_database(session: Session) -> None:
     ]:
         _upsert_seed(session, ChatMessage, message)
 
-    _upsert_seed(session, AlbumItem, AlbumItem(id="a_01", owner_user_id="u_01", member_ids=["u_01", "u_02", "u_04"], source_setlog_ids=["s_01", "s_04", "s_05"], image_url="/uploads/seed/generated-demo.jpg", created_at=BASE_TIME))
     session.commit()

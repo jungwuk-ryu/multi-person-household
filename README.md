@@ -37,7 +37,7 @@ By default, the client calls same-origin `/api`, `/uploads`, and `/ws`. This avo
 Default Vite proxy target:
 
 ```text
-http://131.186.62.191:3021
+http://127.0.0.1:3021
 ```
 
 Override the API base for local or alternate environments by creating `.env` from `.env.example`:
@@ -50,7 +50,7 @@ Then edit:
 
 ```bash
 VITE_API_BASE_URL=
-VITE_API_PROXY_TARGET=http://131.186.62.191:3021
+VITE_API_PROXY_TARGET=http://127.0.0.1:3021
 ```
 
 Only set `VITE_API_BASE_URL` to a full URL when that API URL is also HTTPS, such as `https://api.example.com`.

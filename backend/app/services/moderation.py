@@ -52,6 +52,35 @@ class ModerationService:
             return ModerationStatus.blocked
         return fallback_status
 
+    async def suggest_setlog_caption(
+        self,
+        *,
+        image_bytes: bytes,
+        mime_type: str | None,
+        filename: str | None = None,
+    ) -> dict[str, str]:
+        fallback_status = self.moderate(filename)
+        if fallback_status == ModerationStatus.blocked:
+            return {"safety_status": "blocked", "suggested_caption": "", "reason": "이미지 이름에 안전하지 않은 표현이 있어요."}
+
+        settings = get_settings()
+        if not settings.gemini_api_key:
+            return {"safety_status": "approved", "suggested_caption": "오늘의 순간을 짧게 남겨요", "reason": "fallback"}
+        if len(image_bytes) > settings.gemini_inline_media_max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "MEDIA_TOO_LARGE_FOR_GEMINI", "message": "Image is too large to verify with Gemini."},
+            )
+
+        payload = self._build_caption_payload(image_bytes=image_bytes, mime_type=mime_type)
+        data = await self._call_gemini(
+            payload,
+            model=settings.gemini_caption_model,
+            timeout=settings.gemini_caption_timeout_seconds,
+            max_attempts=1,
+        )
+        return self._caption_from_gemini_response(data)
+
     def _build_gemini_payload(self, *, caption: str, media_path: Path | None, mime_type: str | None) -> dict[str, Any]:
         parts: list[dict[str, Any]] = []
         settings = get_settings()
@@ -95,14 +124,56 @@ class ModerationService:
             f"한 줄 상태: {caption}"
         )
 
-    async def _call_gemini(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _build_caption_payload(self, *, image_bytes: bytes, mime_type: str | None) -> dict[str, Any]:
+        guessed_mime_type = normalize_image_mime_type(mime_type)
+        return {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "inline_data": {
+                                "mime_type": guessed_mime_type,
+                                "data": base64.b64encode(image_bytes).decode("ascii"),
+                            }
+                        },
+                        {"text": self._build_caption_prompt()},
+                    ],
+                }
+            ],
+            "safetySettings": SAFETY_SETTINGS,
+            "generationConfig": {
+                "temperature": 0.55,
+                "maxOutputTokens": 96,
+                "responseMimeType": "application/json",
+            },
+        }
+
+    def _build_caption_prompt(self) -> str:
+        return (
+            "너는 '다인가구'의 짧은 영상 로그 썸네일을 보고 한 줄 상태를 추천하는 에디터야.\n"
+            "먼저 이미지가 서비스에 안전한지 확인해. 성적/노출, 폭력/자해, 혐오/괴롭힘, 개인정보, 위험행위, "
+            "불법행위, 스팸, 미성년자 안전 문제가 의심되면 blocked로 판단해.\n"
+            "안전하면 한국어로 자연스럽고 실제 커뮤니티 말투의 한 줄 상태를 추천해. 12~28자, 해시태그/따옴표/이모지 없이, "
+            "이미지에서 보이는 상황만 바탕으로 써.\n"
+            '반드시 JSON만 반환해: {"decision":"approved"|"blocked","caption":"추천 문장","reason":"짧은 사유"}'
+        )
+
+    async def _call_gemini(
+        self,
+        payload: dict[str, Any],
+        *,
+        model: str | None = None,
+        timeout: float | None = None,
+        max_attempts: int = GEMINI_MAX_ATTEMPTS,
+    ) -> dict[str, Any]:
         settings = get_settings()
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{settings.gemini_moderation_model}:generateContent"
+            f"{model or settings.gemini_moderation_model}:generateContent"
         )
-        async with httpx.AsyncClient(timeout=settings.gemini_moderation_timeout_seconds) as client:
-            for attempt in range(GEMINI_MAX_ATTEMPTS):
+        async with httpx.AsyncClient(timeout=timeout or settings.gemini_moderation_timeout_seconds) as client:
+            for attempt in range(max_attempts):
                 try:
                     response = await client.post(
                         url,
@@ -111,7 +182,7 @@ class ModerationService:
                         json=payload,
                     )
                 except httpx.HTTPError:
-                    if attempt < GEMINI_MAX_ATTEMPTS - 1:
+                    if attempt < max_attempts - 1:
                         await asyncio.sleep(0.8 * (2**attempt))
                         continue
                     raise HTTPException(
@@ -128,7 +199,7 @@ class ModerationService:
                             detail={"code": "GEMINI_MODERATION_FAILED", "message": "Gemini returned an invalid response."},
                         ) from None
 
-                if response.status_code in RETRIABLE_GEMINI_STATUS_CODES and attempt < GEMINI_MAX_ATTEMPTS - 1:
+                if response.status_code in RETRIABLE_GEMINI_STATUS_CODES and attempt < max_attempts - 1:
                     await asyncio.sleep(0.8 * (2**attempt))
                     continue
 
@@ -202,3 +273,50 @@ class ModerationService:
         if decision in {"approved", "blocked"}:
             return decision
         return None
+
+    def _caption_from_gemini_response(self, data: dict[str, Any]) -> dict[str, str]:
+        prompt_feedback = data.get("promptFeedback") or data.get("prompt_feedback") or {}
+        if prompt_feedback.get("blockReason") or prompt_feedback.get("block_reason"):
+            return {"safety_status": "blocked", "suggested_caption": "", "reason": "안전 기준에 맞지 않는 장면이에요."}
+        if self._has_blocking_safety_rating(prompt_feedback.get("safetyRatings") or prompt_feedback.get("safety_ratings")):
+            return {"safety_status": "blocked", "suggested_caption": "", "reason": "안전 기준에 맞지 않는 장면이에요."}
+
+        for candidate in data.get("candidates") or []:
+            if candidate.get("finishReason") == "SAFETY" or candidate.get("finish_reason") == "SAFETY":
+                return {"safety_status": "blocked", "suggested_caption": "", "reason": "안전 기준에 맞지 않는 장면이에요."}
+            if self._has_blocking_safety_rating(candidate.get("safetyRatings") or candidate.get("safety_ratings")):
+                return {"safety_status": "blocked", "suggested_caption": "", "reason": "안전 기준에 맞지 않는 장면이에요."}
+
+            parsed = self._json_from_text(self._candidate_text(candidate))
+            decision = str(parsed.get("decision", "")).lower()
+            if decision == "blocked":
+                return {"safety_status": "blocked", "suggested_caption": "", "reason": clean_caption_text(parsed.get("reason"))}
+            caption = clean_caption_text(parsed.get("caption"))
+            if decision == "approved" and caption:
+                return {"safety_status": "approved", "suggested_caption": caption, "reason": clean_caption_text(parsed.get("reason"))}
+
+        return {"safety_status": "approved", "suggested_caption": "오늘의 순간을 짧게 남겨요", "reason": "fallback"}
+
+    def _json_from_text(self, text: str) -> dict[str, Any]:
+        if not text.strip():
+            return {}
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        raw = match.group(0) if match else text
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+
+def normalize_image_mime_type(value: str | None) -> str:
+    if value in {"image/jpeg", "image/png", "image/webp"}:
+        return value
+    return "image/jpeg"
+
+
+def clean_caption_text(value: Any) -> str:
+    text = str(value or "").strip()
+    text = re.sub(r"^[\"'“”‘’]+|[\"'“”‘’]+$", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text[:60]

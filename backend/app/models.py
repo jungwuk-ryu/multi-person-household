@@ -46,6 +46,7 @@ class FlashMeetType(str, Enum):
     cafe = "cafe"
     walk = "walk"
     call = "call"
+    other = "other"
 
 
 class FlashMeetStatus(str, Enum):
@@ -76,6 +77,7 @@ class Setlog(SQLModel, table=True):
     hour_slot: str
     created_at: datetime = Field(default_factory=utc_now, index=True)
     moderation_status: ModerationStatus = Field(default=ModerationStatus.approved, index=True)
+    like_count: int = Field(default=0, ge=0)
 
 
 class Friendship(SQLModel, table=True):

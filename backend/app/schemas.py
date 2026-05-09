@@ -63,6 +63,7 @@ class SetlogOut(CamelModel):
     created_at: datetime
     moderation_status: ModerationStatus
     is_friend: bool | None = None
+    like_count: int = 0
 
 
 class SetlogsResponse(CamelModel):
@@ -71,6 +72,20 @@ class SetlogsResponse(CamelModel):
 
 class SetlogCreateResponse(CamelModel):
     item: SetlogOut
+
+
+class SetlogLikeRequest(CamelModel):
+    liked: bool
+
+
+class SetlogLikeResponse(CamelModel):
+    like_count: int
+
+
+class SetlogCaptionSuggestionResponse(CamelModel):
+    safety_status: Literal["approved", "blocked"]
+    suggested_caption: str
+    reason: str = ""
 
 
 class SetlogFromUrlRequest(CamelModel):
@@ -108,6 +123,7 @@ class FlashMeetCreateRequest(CamelModel):
     message: str
     city_label: str
     expires_in_hours: int = Field(ge=1, le=3)
+    participant_ids: list[str] = Field(default_factory=list)
 
 
 class FlashMeetCreateResponse(CamelModel):
@@ -195,6 +211,17 @@ class AlbumResponse(CamelModel):
 class GroupPhotoRequest(CamelModel):
     user_id: str
     source_setlog_ids: list[str]
+    base_setlog_id: str | None = None
+    persist: bool = True
+    prompt: str
+
+
+class MemoPhotoRequest(CamelModel):
+    user_id: str
+    source_image_url: str
+    source_setlog_ids: list[str]
+    base_setlog_id: str | None = None
+    style: Literal["memo", "3d"] = "memo"
     prompt: str
 
 
@@ -203,4 +230,5 @@ class GroupPhotoResponse(CamelModel):
     generated_image_url: str
     status: ModerationStatus
     source_setlog_ids: list[str]
-    album_item: AlbumItemOut
+    base_setlog_id: str
+    album_item: AlbumItemOut | None = None

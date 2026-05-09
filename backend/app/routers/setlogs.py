@@ -8,7 +8,14 @@ from sqlmodel import Session, select
 from app.crud import api_error, friend_ids, get_user_or_404, make_id, setlog_out
 from app.database import get_session
 from app.models import MediaType, ModerationStatus, Setlog, SetlogCategory, Visibility
-from app.schemas import SetlogCreateResponse, SetlogFromUrlRequest, SetlogsResponse
+from app.schemas import (
+    SetlogCaptionSuggestionResponse,
+    SetlogCreateResponse,
+    SetlogFromUrlRequest,
+    SetlogLikeRequest,
+    SetlogLikeResponse,
+    SetlogsResponse,
+)
 from app.services.media import media_path_from_url, normalize_media_type, save_upload, save_url_image
 from app.services.moderation import ModerationService
 
@@ -116,3 +123,31 @@ async def create_setlog_from_url(payload: SetlogFromUrlRequest, session: Session
     session.commit()
     session.refresh(setlog)
     return {"item": setlog_out(setlog, user)}
+
+
+@router.post("/caption-suggestion", response_model=SetlogCaptionSuggestionResponse)
+async def suggest_caption_from_thumbnail(image: UploadFile = File(...)):
+    content_type = normalize_media_type(image.content_type)
+    if not content_type.startswith("image/"):
+        raise api_error(status.HTTP_400_BAD_REQUEST, "IMAGE_REQUIRED", "Thumbnail image is required.")
+    image_bytes = await image.read()
+    return await ModerationService().suggest_setlog_caption(
+        image_bytes=image_bytes,
+        mime_type=content_type,
+        filename=image.filename,
+    )
+
+
+@router.post("/{setlog_id}/like", response_model=SetlogLikeResponse)
+def update_setlog_like(setlog_id: str, payload: SetlogLikeRequest, session: Session = Depends(get_session)):
+    setlog = session.get(Setlog, setlog_id)
+    if setlog is None:
+        raise api_error(status.HTTP_404_NOT_FOUND, "SETLOG_NOT_FOUND", "Setlog not found")
+    if setlog.moderation_status != ModerationStatus.approved:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "SETLOG_NOT_LIKEABLE", "Only approved Setlogs can be liked")
+    delta = 1 if payload.liked else -1
+    setlog.like_count = max(0, setlog.like_count + delta)
+    session.add(setlog)
+    session.commit()
+    session.refresh(setlog)
+    return {"like_count": setlog.like_count}

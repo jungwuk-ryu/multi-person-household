@@ -32,6 +32,11 @@ FLASH_META = {
         "title": "퇴근 후 수다방",
         "thumbnail_url": "/uploads/seed/room-chat.webp",
     },
+    "other": {
+        "template": "other_room",
+        "title": "기타",
+        "thumbnail_url": "/uploads/seed/room-chat.webp",
+    },
 }
 
 
@@ -69,7 +74,12 @@ def list_flash_meets(userId: str = "user-mina", session: Session = Depends(get_s
 @router.post("", response_model=FlashMeetCreateResponse)
 async def create_flash_meet(payload: FlashMeetCreateRequest, session: Session = Depends(get_session)):
     get_user_or_404(session, payload.creator_id)
-    meet = FlashMeet(id=make_id("flash"), creator_id=payload.creator_id, type=payload.type, message=payload.message, city_label=payload.city_label, expires_at=datetime.now(timezone.utc) + timedelta(hours=payload.expires_in_hours), participant_ids=[payload.creator_id], status=FlashMeetStatus.active)
+    participant_ids: list[str] = []
+    for user_id in [payload.creator_id, *payload.participant_ids]:
+        get_user_or_404(session, user_id)
+        if user_id not in participant_ids:
+            participant_ids.append(user_id)
+    meet = FlashMeet(id=make_id("flash"), creator_id=payload.creator_id, type=payload.type, message=payload.message, city_label=payload.city_label, expires_at=datetime.now(timezone.utc) + timedelta(hours=payload.expires_in_hours), participant_ids=participant_ids, status=FlashMeetStatus.active)
     session.add(meet)
     session.commit()
     session.refresh(meet)

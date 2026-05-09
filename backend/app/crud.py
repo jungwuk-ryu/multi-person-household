@@ -40,6 +40,7 @@ def setlog_out(setlog: Setlog, user: User, is_friend: bool | None = None) -> dic
         "created_at": setlog.created_at,
         "moderation_status": setlog.moderation_status,
         "is_friend": is_friend,
+        "like_count": setlog.like_count,
     }
 
 

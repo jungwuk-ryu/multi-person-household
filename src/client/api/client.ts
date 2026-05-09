@@ -1,6 +1,6 @@
 const DEFAULT_API_BASE_URL = "";
 const DEFAULT_TIMEOUT_MS = 4500;
-const AI_TIMEOUT_MS = 20000;
+const AI_TIMEOUT_MS = 60000;
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 const shouldUseSameOrigin =
@@ -21,7 +21,7 @@ export type Visibility = "public" | "friends";
 export type ModerationStatus = "pending" | "approved" | "blocked";
 export type Gender = "female" | "male" | "other";
 export type LogTopic = "meal" | "chat" | "walk";
-export type RoomTemplate = "meal_room" | "after_work_chat_room" | "neighborhood_walk_room";
+export type RoomTemplate = "meal_room" | "after_work_chat_room" | "neighborhood_walk_room" | "other_room";
 export type RoomStatus = "active" | "expired" | "closed";
 export type MediaType = "video" | "image";
 
@@ -56,6 +56,17 @@ export type SetlogDto = {
   createdAt: string;
   moderationStatus: ModerationStatus;
   isFriend: boolean;
+  likeCount: number;
+};
+
+export type SetlogLikeResponseDto = {
+  likeCount: number;
+};
+
+export type CaptionSuggestionDto = {
+  safetyStatus: "approved" | "blocked";
+  suggestedCaption: string;
+  reason?: string;
 };
 
 export type CreateSetlogRequest = {
@@ -96,6 +107,7 @@ export type CreateRoomRequest = {
   message: string;
   cityLabel?: string;
   expiresInMinutes?: number;
+  participantIds?: string[];
   thumbnailUrl?: string;
 };
 
@@ -124,7 +136,17 @@ export type CreateAiPhotoRequest = {
   roomId?: string;
   sourceSetlogIds: string[];
   baseSetlogId: string;
+  persist?: boolean;
   prompt?: string;
+};
+
+export type CreateMemoPhotoRequest = {
+  userId?: string;
+  sourceImageUrl: string;
+  sourceSetlogIds: string[];
+  baseSetlogId: string;
+  style?: "memo" | "3d";
+  prompt: string;
 };
 
 export type AiPhotoResponseDto = {
@@ -223,7 +245,8 @@ const normalizeSetlog = (item: unknown): SetlogDto | null => {
       ["pending", "approved", "blocked"],
       "approved"
     ),
-    isFriend: Boolean(pick(item, "isFriend", "is_friend"))
+    isFriend: Boolean(pick(item, "isFriend", "is_friend")),
+    likeCount: asNumber(pick(item, "likeCount", "like_count", "likes"), 0)
   };
 };
 
@@ -235,11 +258,13 @@ const normalizeRoom = (item: unknown): RoomDto | null => {
       ? "neighborhood_walk_room"
       : type === "cafe" || type === "call"
         ? "after_work_chat_room"
+        : type === "other"
+          ? "other_room"
         : type === "meal"
           ? "meal_room"
           : oneOf(
               pick(item, "template", "roomTemplate", "room_template"),
-              ["meal_room", "after_work_chat_room", "neighborhood_walk_room"],
+              ["meal_room", "after_work_chat_room", "neighborhood_walk_room", "other_room"],
               "meal_room"
             );
   const expiresAt = asOptionalString(pick(item, "expiresAt", "expires_at"));
@@ -311,6 +336,16 @@ const normalizeAiPhoto = (item: unknown): AiPhotoResponseDto | null => {
     ),
     createdAt: asString(pick(item, "createdAt", "created_at"), new Date().toISOString()),
     errorMessage: asOptionalString(pick(item, "errorMessage", "error_message", "error"))
+  };
+};
+
+const normalizeCaptionSuggestion = (item: unknown): CaptionSuggestionDto | null => {
+  const value = unwrap(item, "item", "data", "suggestion");
+  if (!isRecord(value)) return null;
+  return {
+    safetyStatus: oneOf(pick(value, "safetyStatus", "safety_status", "status"), ["approved", "blocked"], "approved"),
+    suggestedCaption: asString(pick(value, "suggestedCaption", "suggested_caption", "caption")),
+    reason: asOptionalString(pick(value, "reason", "message"))
   };
 };
 
@@ -483,6 +518,34 @@ export const api = {
   createSetlogFormData: (payload: CreateSetlogRequest) =>
     api.createSetlog(buildSetlogUploadFormData(payload)),
 
+  suggestSetlogCaption: (image: Blob | File) => {
+    const formData = new FormData();
+    formData.append("image", image, uploadNameForBlob(image));
+    return requestJson<CaptionSuggestionDto>(
+      "/api/setlogs/caption-suggestion",
+      {
+        method: "POST",
+        body: formData,
+        timeoutMs: 9000
+      },
+      normalizeCaptionSuggestion
+    );
+  },
+
+  updateSetlogLike: (setlogId: string, liked: boolean) =>
+    requestJson<SetlogLikeResponseDto>(
+      `/api/setlogs/${encodeURIComponent(setlogId)}/like`,
+      {
+        method: "POST",
+        body: jsonBody({ liked })
+      },
+      (data) => {
+        const value = unwrap(data, "data", "item");
+        if (!isRecord(value)) return null;
+        return { likeCount: asNumber(pick(value, "likeCount", "like_count"), 0) };
+      }
+    ),
+
   getRooms: (userId: string) =>
     requestJson<RoomDto[]>(
       `/api/flash-meets?userId=${encodeURIComponent(userId)}`,
@@ -502,10 +565,13 @@ export const api = {
               ? "walk"
               : payload.template === "after_work_chat_room"
                 ? "cafe"
-                : "meal",
+                : payload.template === "other_room"
+                  ? "other"
+                  : "meal",
           message: payload.message,
           cityLabel: payload.cityLabel,
-          expiresInHours: Math.max(1, Math.min(3, Math.ceil((Number(payload.expiresInMinutes) || 60) / 60)))
+          expiresInHours: Math.max(1, Math.min(3, Math.ceil((Number(payload.expiresInMinutes) || 60) / 60))),
+          participantIds: payload.participantIds
         })
       },
       (data) => normalizeRoom(unwrap(data, "item", "room", "flashMeet", "flash_meet", "data"))
@@ -561,10 +627,53 @@ export const api = {
           userId: payload.userId,
           sourceSetlogIds: payload.sourceSetlogIds,
           baseSetlogId: payload.baseSetlogId,
+          persist: payload.persist,
           prompt: payload.prompt ?? "각자의 로그 순간을 한 장소에서 함께 찍은 자연스러운 사진처럼 만들어줘"
         }),
         timeoutMs: AI_TIMEOUT_MS
       },
-      (data) => normalizeAiPhoto(unwrap(data, "photo", "albumItem", "album_item", "data"))
+      (data) => {
+        const root: UnknownRecord = isRecord(data) ? data : {};
+        const albumItem = unwrap(data, "albumItem", "album_item", "photo", "data");
+        const normalized = normalizeAiPhoto(albumItem);
+        if (!normalized) return null;
+        const generatedImageUrl = asOptionalString(pick(root, "generatedImageUrl", "generated_image_url"));
+        return {
+          ...normalized,
+          imageUrl: normalized.imageUrl ?? (generatedImageUrl ? toApiAssetUrl(generatedImageUrl) : null),
+          baseSetlogId: normalized.baseSetlogId ?? asOptionalString(pick(root, "baseSetlogId", "base_setlog_id")),
+          status: oneOf(pick(root, "status"), ["pending", "processing", "completed", "failed", "blocked"], normalized.status)
+        };
+      }
+    ),
+
+  createMemoPhoto: (payload: CreateMemoPhotoRequest) =>
+    requestJson<AiPhotoResponseDto>(
+      "/api/ai/memo-photo",
+      {
+        method: "POST",
+        body: jsonBody({
+          userId: payload.userId,
+          sourceImageUrl: payload.sourceImageUrl,
+          sourceSetlogIds: payload.sourceSetlogIds,
+          baseSetlogId: payload.baseSetlogId,
+          style: payload.style,
+          prompt: payload.prompt
+        }),
+        timeoutMs: AI_TIMEOUT_MS
+      },
+      (data) => {
+        const root: UnknownRecord = isRecord(data) ? data : {};
+        const albumItem = unwrap(data, "albumItem", "album_item", "photo", "data");
+        const normalized = normalizeAiPhoto(albumItem);
+        if (!normalized) return null;
+        const generatedImageUrl = asOptionalString(pick(root, "generatedImageUrl", "generated_image_url"));
+        return {
+          ...normalized,
+          imageUrl: normalized.imageUrl ?? (generatedImageUrl ? toApiAssetUrl(generatedImageUrl) : null),
+          baseSetlogId: normalized.baseSetlogId ?? asOptionalString(pick(root, "baseSetlogId", "base_setlog_id")),
+          status: oneOf(pick(root, "status"), ["pending", "processing", "completed", "failed", "blocked"], normalized.status)
+        };
+      }
     )
 };

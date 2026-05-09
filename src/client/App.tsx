@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Clock3,
   Flag,
+  Heart,
   Home,
   ImagePlus,
   MapPin,
@@ -38,7 +39,16 @@ type LogTopic = "meal" | "chat" | "walk";
 type TopicFilter = "all" | LogTopic;
 type Visibility = "public" | "friends";
 type ModerationStatus = "pending" | "approved" | "blocked";
-type RoomTemplate = "meal_room" | "after_work_chat_room" | "neighborhood_walk_room";
+type RoomTemplate = "meal_room" | "after_work_chat_room" | "neighborhood_walk_room" | "other_room";
+type RoomFilter = "all" | RoomTemplate;
+type MoreAction = "profile" | "neighborhood" | "feed" | "notifications" | "reports" | "support";
+type AiStyle = "default" | "memo" | "3d";
+type AiGenerationState =
+  | { status: "idle" }
+  | { status: "base-generating"; style: AiStyle; message: string }
+  | { status: "memo-generating"; style: AiStyle; imageUrl: string; message: string }
+  | { status: "completed"; style: AiStyle; imageUrl: string; title: string; message: string }
+  | { status: "failed"; style: AiStyle; imageUrl?: string; message: string };
 
 type User = {
   id: string;
@@ -66,6 +76,9 @@ type Setlog = {
   createdAt: string;
   moderationStatus: ModerationStatus;
   isFriend: boolean;
+  likeCount: number;
+  uploadState?: "uploading" | "reviewing" | "failed";
+  uploadMessage?: string;
 };
 
 type Room = {
@@ -104,9 +117,76 @@ type RecordedSetlogCapture = {
   thumbnailUrl: string;
 };
 
+type CaptionSuggestionState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; caption: string }
+  | { status: "blocked"; message: string }
+  | { status: "failed"; message: string };
+
 type ReportReason = "inappropriate" | "harassment" | "privacy" | "spam" | "pressure" | "other";
 
 const SETLOG_DURATION_SECONDS = 4;
+const LIKED_SETLOGS_STORAGE_KEY = "daingagu:liked-setlogs";
+const feedHourSlots = [
+  { offset: -1, label: "1시간 전" },
+  { offset: 0, label: "지금" },
+  { offset: 1, label: "1시간 후" }
+] as const;
+const MEMO_STYLE_PROMPT = `
+[컨셉]
+전체적인 분위기는 따뜻하고 감성적인 '인스타 스토리' 또는 '잡지 속 카페 투어' 페이지처럼 연출해줘. 사진의 여백을 활용해 흰색 손글씨 주석을 추가해줘.
+
+[드로잉 규칙]
+펜 스타일: 얇은 흰색 펜으로 직접 그린 듯한 느낌. 한 붓 그리기처럼 자연스럽고 살짝 삐뚤삐뚤한 선.
+라인: 주요 음식/오브젝트의 외곽선을 따라 얇은 흰색 테두리 추가.
+유도: 화살표나 부드러운 곡선 점선을 활용해 시선을 아이템으로 유도.
+장식: 작은 하트(♡), 반짝이(✨), 김이 모락모락 나는 선(♨), 귀여운 미소(о´∀\`о) 등 감성적인 아이콘을 과하지 않게 배치.
+
+[텍스트 규칙]
+언어: 한국어(한글) 손글씨체.
+말투: 짧고 귀여운 혼잣말, 일기 형식, 다정하고 감성적인 톤.
+내용 구성:
+메인 음식: 식감과 맛 표현 (예: "완전 겉바속촉!", "입에서 살살 녹아")
+사이드/음료: 기분과 상태 표현 (예: "시원함 그 자체", "향긋해서 좋아")
+분위기: 공간의 느낌 (예: "나만 알고 싶은 자리", "햇살 맛집이네")
+총평: 한 줄 요약 (예: "오늘 하루도 수고했어🍀", "완벽한 한 끼였다!")
+
+이 사진 속 아이템들을 분석해서, 위에서 정의한 [한글 전용 범용 프롬프트] 규칙대로 흰색 손글씨 메모를 추가해줘. 여백을 잘 살려서 세련되게 만들어줘.
+`.trim();
+const THREE_D_STYLE_PROMPT = `
+Create an image that looks like a high-quality 3D reconstruction of a real-world space generated from multiple photographs using advanced photogrammetry or Gaussian splatting.
+
+The result should closely match real-world geometry and appearance, almost indistinguishable from reality at first glance.
+
+Quality:
+- highly detailed and accurate geometry
+- realistic proportions and spatial consistency
+- sharp, high-resolution textures derived from real images
+- consistent lighting and color across the scene
+
+Subtle imperfections (important):
+- slight surface noise or uneven mesh in less visible areas
+- minor texture seams or blending artifacts
+- small floating fragments or soft edges in complex regions
+- very subtle reconstruction errors, not distracting
+
+Camera:
+- natural perspective (eye-level or slightly elevated)
+- similar to viewing a reconstructed 3D model in a viewer
+
+Style:
+- clean but still recognizably reconstructed (not CGI perfect)
+- looks like a near-final photogrammetry or NeRF result
+
+Background:
+- neutral studio background (white or light gray)
+
+Important:
+- Do NOT stylize or make it artistic
+- Do NOT make it look like a perfect CGI render
+- It should feel like a real place reconstructed into 3D with very high fidelity
+`.trim();
 
 const currentUser: User = {
   id: "u_01",
@@ -203,7 +283,8 @@ const initialSetlogs: Setlog[] = [
     hourSlot: "20:00",
     createdAt: "2026-05-09T11:00:00.000Z",
     moderationStatus: "approved",
-    isFriend: true
+    isFriend: true,
+    likeCount: 12
   },
   {
     id: "s_02",
@@ -220,7 +301,8 @@ const initialSetlogs: Setlog[] = [
     hourSlot: "20:00",
     createdAt: "2026-05-09T11:03:00.000Z",
     moderationStatus: "approved",
-    isFriend: false
+    isFriend: false,
+    likeCount: 8
   },
   {
     id: "s_03",
@@ -237,7 +319,8 @@ const initialSetlogs: Setlog[] = [
     hourSlot: "20:00",
     createdAt: "2026-05-09T11:07:00.000Z",
     moderationStatus: "approved",
-    isFriend: false
+    isFriend: false,
+    likeCount: 5
   },
   {
     id: "s_04",
@@ -254,7 +337,8 @@ const initialSetlogs: Setlog[] = [
     hourSlot: "19:00",
     createdAt: "2026-05-09T10:22:00.000Z",
     moderationStatus: "approved",
-    isFriend: true
+    isFriend: true,
+    likeCount: 9
   },
   {
     id: "s_05",
@@ -271,7 +355,8 @@ const initialSetlogs: Setlog[] = [
     hourSlot: "20:00",
     createdAt: "2026-05-09T11:12:00.000Z",
     moderationStatus: "approved",
-    isFriend: true
+    isFriend: true,
+    likeCount: 18
   }
 ];
 
@@ -311,6 +396,18 @@ const initialRooms: Room[] = [
     participantIds: ["u_03", "u_01"],
     status: "active",
     thumbnailUrl: roomWalkThumbnail
+  },
+  {
+    id: "r_04",
+    creatorId: "u_02",
+    template: "other_room",
+    title: "기타",
+    message: "지금 할 일은 없는데 잠깐 떠들 사람 있나요",
+    cityLabel: "성수",
+    expiresInMinutes: 58,
+    participantIds: ["u_02"],
+    status: "active",
+    thumbnailUrl: roomChatThumbnail
   }
 ];
 
@@ -328,6 +425,20 @@ const initialMessages: ChatMessage[] = [
     senderId: "u_01",
     text: "좋아요. 저는 성수 쪽이에요.",
     createdAt: "20:12"
+  },
+  {
+    id: "m_03",
+    roomId: "c_02",
+    senderId: "u_04",
+    text: "등대 로그 좋다. 다음엔 같이 바람 쐬러 가요.",
+    createdAt: "19:42"
+  },
+  {
+    id: "m_04",
+    roomId: "r_01",
+    senderId: "u_04",
+    text: "오늘 저녁 성수에서 먹을 사람들 여기로 모여요.",
+    createdAt: "20:18"
   }
 ];
 
@@ -344,6 +455,14 @@ const topicFilters: Array<{ id: TopicFilter; label: string }> = [
   { id: "meal", label: "혼밥" },
   { id: "chat", label: "수다" },
   { id: "walk", label: "산책" }
+];
+
+const roomFilters: Array<{ id: RoomFilter; label: string }> = [
+  { id: "all", label: "전체" },
+  { id: "meal_room", label: "혼밥방" },
+  { id: "after_work_chat_room", label: "수다방" },
+  { id: "neighborhood_walk_room", label: "산책방" },
+  { id: "other_room", label: "기타" }
 ];
 
 const reportReasons: Array<{ id: ReportReason; label: string; description: string }> = [
@@ -370,6 +489,11 @@ const roomMeta: Record<RoomTemplate, { icon: typeof Utensils; tone: string; capt
     icon: Wind,
     tone: "bg-noon/55 text-ink",
     caption: "동네 한 바퀴"
+  },
+  other_room: {
+    icon: MoreHorizontal,
+    tone: "bg-cloud text-ink",
+    caption: "무엇이든 가볍게"
   }
 };
 
@@ -381,36 +505,52 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof Home }> = [
   { id: "more", label: "더보기", icon: MoreHorizontal }
 ];
 
+const friendChatRoomId = (friendId: string) => {
+  if (friendId === "u_02") return "c_01";
+  if (friendId === "u_04") return "c_02";
+  return `friend-${[currentUser.id, friendId].sort().join("-")}`;
+};
+
+const readLikedSetlogs = () => {
+  if (typeof window === "undefined") return new Set<string>();
+  try {
+    const value = window.sessionStorage.getItem(LIKED_SETLOGS_STORAGE_KEY);
+    const ids = value ? JSON.parse(value) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+};
+
+const persistLikedSetlogs = (ids: Set<string>) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(LIKED_SETLOGS_STORAGE_KEY, JSON.stringify([...ids]));
+  } catch {
+    // Demo preference only; liking still works for the current render if storage is unavailable.
+  }
+};
+
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const response = await fetch(dataUrl);
+  return response.blob();
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("feed");
   const [activeFilter, setActiveFilter] = useState<Filter>("all");
   const [activeTopic, setActiveTopic] = useState<TopicFilter>("all");
+  const [feedHourOffset, setFeedHourOffset] = useState(0);
   const [nickname, setNickname] = useState(currentUser.nickname);
   const [loginName, setLoginName] = useState(currentUser.nickname);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [setlogs, setSetlogs] = useState<Setlog[]>(initialSetlogs);
+  const [likedSetlogIds, setLikedSetlogIds] = useState<Set<string>>(() => readLikedSetlogs());
   const [rooms, setRooms] = useState<Room[]>(initialRooms);
-  const [friendIds] = useState<string[]>(["u_02", "u_04"]);
+  const [friendIds, setFriendIds] = useState<string[]>(["u_02", "u_04"]);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [chatDraft, setChatDraft] = useState("오늘 저녁 같이 남겨볼래요?");
-  const [albumItems, setAlbumItems] = useState<AlbumItem[]>([
-    {
-      id: "a_01",
-      title: "친구들과 남긴 저녁",
-      imageUrl: media.dinnerA,
-      sourceSetlogIds: ["s_01"],
-      type: "setlog_frame",
-      createdAt: "20:00"
-    },
-    {
-      id: "a_02",
-      title: "내 작은 식탁",
-      imageUrl: media.dinnerB,
-      sourceSetlogIds: ["s_04"],
-      type: "setlog_frame",
-      createdAt: "19:00"
-    }
-  ]);
+  const [albumItems, setAlbumItems] = useState<AlbumItem[]>([]);
   const [sheet, setSheet] = useState<null | "upload" | "room" | "ai">(null);
   const [toast, setToast] = useState("");
   const [caption, setCaption] = useState("혼밥 중, 같이 먹는 느낌이면 좋겠다");
@@ -418,8 +558,11 @@ function App() {
   const [roomTemplate, setRoomTemplate] = useState<RoomTemplate>("meal_room");
   const [roomMessage, setRoomMessage] = useState("성수에서 지금 밥 먹는 사람들");
   const [roomHours, setRoomHours] = useState<1 | 2 | 3>(1);
+  const [selectedRoomFriendIds, setSelectedRoomFriendIds] = useState<string[]>(["u_02"]);
   const [selectedSetlogIds, setSelectedSetlogIds] = useState<string[]>(["s_01", "s_04"]);
   const [baseSetlogId, setBaseSetlogId] = useState("s_04");
+  const [aiStyle, setAiStyle] = useState<AiStyle>("default");
+  const [aiGeneration, setAiGeneration] = useState<AiGenerationState>({ status: "idle" });
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
@@ -427,6 +570,8 @@ function App() {
   const [reportReason, setReportReason] = useState<ReportReason>("inappropriate");
   const [reportDetail, setReportDetail] = useState("");
   const [isSafetyOpen, setIsSafetyOpen] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [profileTargetId, setProfileTargetId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -444,7 +589,15 @@ function App() {
       if (cancelled) return;
 
       const nextSetlogs = normalizeSetlogs(remoteSetlogs);
-      if (nextSetlogs.length) setSetlogs(nextSetlogs);
+      if (nextSetlogs.length) {
+        setSetlogs((items) => {
+          const localUploads = items.filter((item) => item.uploadState);
+          return [
+            ...localUploads,
+            ...nextSetlogs.filter((remoteSetlog) => !localUploads.some((localSetlog) => localSetlog.id === remoteSetlog.id))
+          ];
+        });
+      }
 
       const nextRooms = normalizeRooms(remoteRooms);
       if (nextRooms.length) setRooms(nextRooms);
@@ -469,7 +622,9 @@ function App() {
   );
 
   const filteredSetlogs = useMemo(() => {
-    return approvedSetlogs.filter((setlog) => {
+    const items = setlogs.filter((setlog) => {
+      const visibleLocalUpload = setlog.userId === currentUser.id && Boolean(setlog.uploadState);
+      if (setlog.moderationStatus !== "approved" && !visibleLocalUpload) return false;
       if (activeFilter === "friends") return friendIds.includes(setlog.userId) || setlog.userId === currentUser.id;
       if (activeFilter === "sameGender") {
         return setlog.gender === currentUser.gender && getUser(setlog.userId).gender === currentUser.gender;
@@ -484,7 +639,14 @@ function App() {
       if (activeTopic === "all") return true;
       return setlog.topic === activeTopic;
     });
-  }, [activeFilter, activeTopic, approvedSetlogs, friendIds]);
+    const uniqueItems = items.filter((setlog, index, list) => {
+      if (setlog.uploadState) return true;
+      return list.findIndex((item) => item.userId === setlog.userId && !item.uploadState) === index;
+    });
+    if (feedHourOffset === 0) return uniqueItems;
+    const shift = feedHourOffset > 0 ? 1 : Math.max(0, uniqueItems.length - 1);
+    return [...uniqueItems.slice(shift), ...uniqueItems.slice(0, shift)];
+  }, [activeFilter, activeTopic, feedHourOffset, friendIds, setlogs]);
 
   const selectedSetlogs = useMemo(
     () => approvedSetlogs.filter((setlog) => selectedSetlogIds.includes(setlog.id)),
@@ -494,6 +656,10 @@ function App() {
   const reportTarget = useMemo(
     () => setlogs.find((setlog) => setlog.id === reportTargetId) ?? null,
     [reportTargetId, setlogs]
+  );
+  const profileTarget = useMemo(
+    () => users.find((user) => user.id === profileTargetId) ?? null,
+    [profileTargetId]
   );
 
   const showToast = (message: string) => {
@@ -531,10 +697,73 @@ function App() {
     showToast(`${reasonLabel} 신고가 접수됐어요`);
   };
 
+  const handleOpenProfile = (userId: string) => {
+    setProfileTargetId(userId);
+  };
+
+  const handleAddFriend = async (userId: string) => {
+    if (userId === currentUser.id || friendIds.includes(userId)) return;
+    setFriendIds((ids) => (ids.includes(userId) ? ids : [...ids, userId]));
+    showToast("친구가 되었어요");
+    await api.addFriend(userId, currentUser.id);
+  };
+
+  const handleToggleLike = async (setlogId: string) => {
+    const wasLiked = likedSetlogIds.has(setlogId);
+    const nextLiked = !wasLiked;
+    const nextLikedIds = new Set(likedSetlogIds);
+    if (nextLiked) {
+      nextLikedIds.add(setlogId);
+    } else {
+      nextLikedIds.delete(setlogId);
+    }
+    setLikedSetlogIds(nextLikedIds);
+    persistLikedSetlogs(nextLikedIds);
+    setSetlogs((items) =>
+      items.map((item) =>
+        item.id === setlogId ? { ...item, likeCount: Math.max(0, item.likeCount + (nextLiked ? 1 : -1)) } : item
+      )
+    );
+
+    const response = await api.updateSetlogLike(setlogId, nextLiked);
+    if (response) {
+      setSetlogs((items) => items.map((item) => (item.id === setlogId ? { ...item, likeCount: response.likeCount } : item)));
+      return;
+    }
+
+    // Keep the optimistic session state if the demo server is temporarily stale or unavailable.
+  };
+
   const handleUpload = async (capture: RecordedSetlogCapture) => {
     setIsUploading(true);
-    setUploadStatus("상태와 영상을 확인 중");
+    setUploadStatus("업로드 및 검토 중");
     const topic = inferLogTopic(caption);
+    const temporaryId = `optimistic_${Date.now()}`;
+    const optimisticSetlog: Setlog = {
+      id: temporaryId,
+      userId: currentUser.id,
+      mediaType: "video",
+      thumbnailUrl: capture.thumbnailUrl,
+      mediaUrl: capture.videoUrl,
+      caption,
+      visibility,
+      cityLabel: currentUser.cityLabel,
+      gender: currentUser.gender,
+      topic,
+      durationSeconds: SETLOG_DURATION_SECONDS,
+      hourSlot: "",
+      createdAt: new Date().toISOString(),
+      moderationStatus: "pending",
+      isFriend: true,
+      likeCount: 0,
+      uploadState: "reviewing",
+      uploadMessage: "업로드 및 검토 중"
+    };
+    setSetlogs((items) => [optimisticSetlog, ...items]);
+    setSheet(null);
+    setActiveTab("feed");
+    showToast("업로드 및 검토 중이에요");
+
     const createdSetlog = await api.createSetlogFormData({
       userId: currentUser.id,
       caption,
@@ -558,6 +787,18 @@ function App() {
               ? "영상 형식을 처리하지 못했어요. 다시 촬영해 주세요"
               : "업로드에 실패했어요. 잠시 뒤 다시 시도해 주세요";
       setUploadStatus(message);
+      setSetlogs((items) =>
+        items.map((item) =>
+          item.id === temporaryId
+            ? {
+                ...item,
+                moderationStatus: errorCode === "SETLOG_REJECTED" || createdSetlog?.moderationStatus === "blocked" ? "blocked" : "pending",
+                uploadState: "failed",
+                uploadMessage: message
+              }
+            : item
+        )
+      );
       setIsUploading(false);
       showToast(message);
       return;
@@ -578,41 +819,42 @@ function App() {
       hourSlot: createdSetlog.hourSlot,
       createdAt: createdSetlog.createdAt,
       moderationStatus: createdSetlog.moderationStatus,
-      isFriend: true
+      isFriend: true,
+      likeCount: createdSetlog.likeCount
     };
-    setSetlogs((items) => [newSetlog, ...items]);
+    setSetlogs((items) => items.map((item) => (item.id === temporaryId ? newSetlog : item)));
     setUploadStatus("새 로그가 올라갔어요");
     setIsUploading(false);
-    setSheet(null);
-    setActiveTab("feed");
     showToast("다인가구에 로그가 올라갔어요");
   };
 
   const handleCreateRoom = async () => {
-    const templateTitle = roomTemplate === "meal_room" ? "혼밥방" : roomTemplate === "after_work_chat_room" ? "퇴근 후 수다방" : "동네 산책방";
+    const title = templateTitle(roomTemplate);
+    const participantIds = Array.from(new Set([currentUser.id, ...selectedRoomFriendIds]));
     const newRoom: Room = {
       id: `r_${Date.now()}`,
       creatorId: currentUser.id,
       template: roomTemplate,
-      title: templateTitle,
+      title,
       message: roomMessage,
       cityLabel: currentUser.cityLabel,
       expiresInMinutes: roomHours * 60,
-      participantIds: [currentUser.id],
+      participantIds,
       status: "active",
-      thumbnailUrl: roomTemplate === "neighborhood_walk_room" ? media.walk : roomTemplate === "after_work_chat_room" ? media.cafe : media.dinnerB
+      thumbnailUrl: thumbnailForRoomTemplate(roomTemplate)
     };
     await api.createRoom({
       creatorId: currentUser.id,
       template: roomTemplate,
       message: roomMessage,
       cityLabel: currentUser.cityLabel,
-      expiresInMinutes: newRoom.expiresInMinutes
+      expiresInMinutes: newRoom.expiresInMinutes,
+      participantIds
     });
     setRooms((items) => [newRoom, ...items]);
     setSheet(null);
     setActiveTab("rooms");
-    showToast(`${templateTitle}이 열렸어요`);
+    showToast(`${title}이 열렸어요`);
   };
 
   const handleJoinRoom = async (roomId: string) => {
@@ -628,7 +870,7 @@ function App() {
       ...items,
       {
         id: `m_${Date.now()}`,
-        roomId: "c_01",
+        roomId,
         senderId: "u_01",
         text: "방에 들어왔어요. 오늘의 로그를 나눠요.",
         createdAt: "지금"
@@ -638,14 +880,14 @@ function App() {
     showToast("번개방에 참여했어요");
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = (roomId: string) => {
     const text = chatDraft.trim();
     if (!text) return;
     setMessages((items) => [
       ...items,
       {
         id: `m_${Date.now()}`,
-        roomId: "c_01",
+        roomId,
         senderId: currentUser.id,
         text,
         createdAt: "지금"
@@ -654,31 +896,108 @@ function App() {
     setChatDraft("");
   };
 
+  const openAiSheet = () => {
+    setAiGeneration({ status: "idle" });
+    setSheet("ai");
+  };
+
+  const albumItemFromPhoto = (photo: NonNullable<Awaited<ReturnType<typeof api.createAiPhoto>>>, title: string): AlbumItem => ({
+    id: photo.id,
+    title,
+    imageUrl: photo.imageUrl ?? media.generated,
+    sourceSetlogIds: photo.sourceSetlogIds.length ? photo.sourceSetlogIds : selectedSetlogIds,
+    type: "ai_group_photo",
+    createdAt: photo.createdAt || "지금"
+  });
+
   const handleGenerateAiPhoto = async () => {
+    const safeBaseSetlogId = selectedSetlogIds.includes(baseSetlogId) ? baseSetlogId : selectedSetlogIds[0] ?? baseSetlogId;
+    const style = aiStyle;
+    const styledTitle = style === "memo" ? "밋업 나우! 메모" : style === "3d" ? "밋업 나우! 3D" : "밋업 나우!";
+    const styledPrompt = style === "3d" ? THREE_D_STYLE_PROMPT : MEMO_STYLE_PROMPT;
     setIsGenerating(true);
-    await api.createAiPhoto({
+    setAiGeneration({
+      status: "base-generating",
+      style,
+      message:
+        style === "memo"
+          ? "먼저 한 장소에 함께 있는 기본 사진을 만들고 있어요."
+          : style === "3d"
+            ? "먼저 한 장소에 함께 있는 기본 사진을 만들고 있어요."
+            : "한 장소에 함께 있는 사진을 만들고 있어요."
+    });
+    const basePhoto = await api.createAiPhoto({
       userId: currentUser.id,
       sourceSetlogIds: selectedSetlogIds,
-      baseSetlogId,
+      baseSetlogId: safeBaseSetlogId,
+      persist: style === "default",
       moderationProvider: "gemini",
       imageProvider: "gpt-image-2"
     });
-    window.setTimeout(() => {
-      setAlbumItems((items) => [
-        {
-          id: `a_${Date.now()}`,
-          title: "성수 혼밥방에서 함께",
-          imageUrl: media.generated,
-          sourceSetlogIds: selectedSetlogIds,
-          type: "ai_group_photo",
-          createdAt: "지금"
-        },
-        ...items
-      ]);
+
+    if (!basePhoto?.imageUrl) {
       setIsGenerating(false);
-      setSheet(null);
+      setAiGeneration({ status: "failed", style, message: api.getLastError()?.message || "밋업 나우! 사진을 만들지 못했어요." });
+      showToast(api.getLastError()?.message || "밋업 나우! 사진을 만들지 못했어요");
+      return;
+    }
+
+    if (style === "default") {
+      const albumItem = albumItemFromPhoto(basePhoto, "밋업 나우!");
+      setAlbumItems((items) => [albumItem, ...items.filter((item) => item.id !== albumItem.id)]);
+      setIsGenerating(false);
+      setAiGeneration({
+        status: "completed",
+        style,
+        imageUrl: basePhoto.imageUrl,
+        title: "밋업 나우!",
+        message: "완성된 사진이 앨범에 저장됐어요."
+      });
       showToast("밋업 나우! 사진이 완성됐어요");
-    }, 900);
+      return;
+    }
+
+    setAiGeneration({
+      status: "memo-generating",
+      style,
+      imageUrl: basePhoto.imageUrl,
+      message:
+        style === "3d"
+          ? "기본 사진이 완성됐어요. 3D 재구성 버전을 추가로 만들고 있어요."
+          : "기본 사진이 완성됐어요. 흰색 손글씨 메모 버전을 추가로 만들고 있어요."
+    });
+    const memoPhoto = await api.createMemoPhoto({
+      userId: currentUser.id,
+      sourceImageUrl: basePhoto.imageUrl,
+      sourceSetlogIds: selectedSetlogIds,
+      baseSetlogId: safeBaseSetlogId,
+      style: style === "3d" ? "3d" : "memo",
+      prompt: styledPrompt
+    });
+
+    if (!memoPhoto?.imageUrl) {
+      setIsGenerating(false);
+      setAiGeneration({
+        status: "failed",
+        style,
+        imageUrl: basePhoto.imageUrl,
+        message: api.getLastError()?.message || `${style === "3d" ? "3D" : "메모"} 버전을 만들지 못했어요. 기본 사진은 화면에 남겨둘게요.`
+      });
+      showToast(api.getLastError()?.message || `${style === "3d" ? "3D" : "메모"} 버전을 만들지 못했어요`);
+      return;
+    }
+
+    const memoAlbumItem = albumItemFromPhoto(memoPhoto, styledTitle);
+    setAlbumItems((items) => [memoAlbumItem, ...items.filter((item) => item.id !== memoAlbumItem.id)]);
+    setIsGenerating(false);
+    setAiGeneration({
+      status: "completed",
+      style,
+      imageUrl: memoPhoto.imageUrl,
+      title: styledTitle,
+      message: `${style === "3d" ? "3D 재구성" : "손글씨 메모"} 버전이 앨범에 저장됐어요.`
+    });
+    showToast(`${styledTitle} 사진이 완성됐어요`);
   };
 
   return (
@@ -691,6 +1010,7 @@ function App() {
           isLoggedIn={isLoggedIn}
           onDemoLogin={handleDemoLogin}
           onSafetyClick={() => setIsSafetyOpen(true)}
+          onNotificationClick={() => setIsNotificationOpen(true)}
         />
         <div className="screen-scroll">
           {activeTab === "feed" && (
@@ -699,10 +1019,15 @@ function App() {
               setActiveFilter={setActiveFilter}
               activeTopic={activeTopic}
               setActiveTopic={setActiveTopic}
+              feedHourOffset={feedHourOffset}
+              setFeedHourOffset={setFeedHourOffset}
               setlogs={filteredSetlogs}
               rooms={rooms}
               friendIds={friendIds}
+              likedSetlogIds={likedSetlogIds}
               onReport={handleReport}
+              onToggleLike={handleToggleLike}
+              onOpenProfile={handleOpenProfile}
               onJoinRoom={handleJoinRoom}
               onOpenRoomSheet={() => setSheet("room")}
             />
@@ -720,11 +1045,9 @@ function App() {
               setDraft={setChatDraft}
               onSend={handleSendMessage}
               albumItems={albumItems}
-              selectedSetlogIds={selectedSetlogIds}
               setSelectedSetlogIds={setSelectedSetlogIds}
-              baseSetlogId={baseSetlogId}
               setBaseSetlogId={setBaseSetlogId}
-              onOpenAi={() => setSheet("ai")}
+              onOpenAi={openAiSheet}
             />
           )}
           {activeTab === "more" && (
@@ -759,6 +1082,9 @@ function App() {
             setMessage={setRoomMessage}
             roomHours={roomHours}
             setRoomHours={setRoomHours}
+            friends={users.filter((user) => friendIds.includes(user.id))}
+            selectedFriendIds={selectedRoomFriendIds}
+            setSelectedFriendIds={setSelectedRoomFriendIds}
             onClose={() => setSheet(null)}
             onSubmit={handleCreateRoom}
           />
@@ -767,6 +1093,10 @@ function App() {
           <AiSheet
             selectedSetlogs={selectedSetlogs}
             baseSetlogId={baseSetlogId}
+            setBaseSetlogId={setBaseSetlogId}
+            aiStyle={aiStyle}
+            setAiStyle={setAiStyle}
+            generation={aiGeneration}
             onClose={() => setSheet(null)}
             onGenerate={handleGenerateAiPhoto}
             isGenerating={isGenerating}
@@ -784,6 +1114,16 @@ function App() {
           />
         )}
         {isSafetyOpen && <SafetyModal onClose={() => setIsSafetyOpen(false)} />}
+        {isNotificationOpen && <NotificationSheet onClose={() => setIsNotificationOpen(false)} />}
+        {profileTarget && (
+          <ProfileSheet
+            user={profileTarget}
+            isFriend={friendIds.includes(profileTarget.id)}
+            setlogs={approvedSetlogs.filter((setlog) => setlog.userId === profileTarget.id)}
+            onClose={() => setProfileTargetId(null)}
+            onAddFriend={() => handleAddFriend(profileTarget.id)}
+          />
+        )}
         {toast && <div className="toast">{toast}</div>}
       </section>
     </main>
@@ -796,7 +1136,8 @@ function AppHeader({
   setLoginName,
   isLoggedIn,
   onDemoLogin,
-  onSafetyClick
+  onSafetyClick,
+  onNotificationClick
 }: {
   nickname: string;
   loginName: string;
@@ -804,6 +1145,7 @@ function AppHeader({
   isLoggedIn: boolean;
   onDemoLogin: () => void;
   onSafetyClick: () => void;
+  onNotificationClick: () => void;
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-black/[0.04] bg-white/85 px-4 pb-3 pt-4 backdrop-blur-[18px]">
@@ -815,7 +1157,7 @@ function AppHeader({
           <IconButton label="안전 상태" onClick={onSafetyClick}>
             <ShieldCheck size={20} />
           </IconButton>
-          <IconButton label="알림">
+          <IconButton label="알림" onClick={onNotificationClick}>
             <Bell size={20} />
           </IconButton>
           <UserAvatar user={currentUser} className="active" label={`${nickname} 프로필`} />
@@ -845,10 +1187,15 @@ function FeedScreen({
   setActiveFilter,
   activeTopic,
   setActiveTopic,
+  feedHourOffset,
+  setFeedHourOffset,
   setlogs,
   rooms,
   friendIds,
+  likedSetlogIds,
   onReport,
+  onToggleLike,
+  onOpenProfile,
   onJoinRoom,
   onOpenRoomSheet
 }: {
@@ -856,18 +1203,56 @@ function FeedScreen({
   setActiveFilter: (filter: Filter) => void;
   activeTopic: TopicFilter;
   setActiveTopic: (topic: TopicFilter) => void;
+  feedHourOffset: number;
+  setFeedHourOffset: (offset: number) => void;
   setlogs: Setlog[];
   rooms: Room[];
   friendIds: string[];
+  likedSetlogIds: Set<string>;
   onReport: (setlogId: string) => void;
+  onToggleLike: (setlogId: string) => void;
+  onOpenProfile: (userId: string) => void;
   onJoinRoom: (roomId: string) => void;
   onOpenRoomSheet: () => void;
 }) {
+  const touchStartRef = useRef<{ x: number; y: number; ignore: boolean } | null>(null);
+  const feedHourLabel = feedHourSlots.find((slot) => slot.offset === feedHourOffset)?.label ?? "지금";
+  const moveHour = (direction: -1 | 1) => {
+    setFeedHourOffset(Math.max(-1, Math.min(1, feedHourOffset + direction)));
+  };
+
   return (
-    <div className="space-y-5 px-4 pb-4 pt-4">
+    <div
+      className="feed-screen space-y-5 px-4 pb-4 pt-4"
+      onTouchStart={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        touchStartRef.current = {
+          x: event.touches[0]?.clientX ?? 0,
+          y: event.touches[0]?.clientY ?? 0,
+          ignore: Boolean(target?.closest(".filter-row, .topic-row, .room-strip, button"))
+        };
+      }}
+      onTouchEnd={(event) => {
+        const start = touchStartRef.current;
+        touchStartRef.current = null;
+        if (!start || start.ignore) return;
+        const touch = event.changedTouches[0];
+        if (!touch) return;
+        const dx = touch.clientX - start.x;
+        const dy = touch.clientY - start.y;
+        if (Math.abs(dx) < 64 || Math.abs(dx) < Math.abs(dy) * 1.35) return;
+        moveHour(dx < 0 ? 1 : -1);
+      }}
+    >
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="section-title">동네에서 올라온 로그</h2>
+          <div>
+            <h2 className="section-title">동네에서 올라온 로그</h2>
+            <div className="feed-hour-pill">
+              <span>{feedHourLabel}</span>
+              <small>좌우로 넘겨보기</small>
+            </div>
+          </div>
           <button className="small-action" onClick={onOpenRoomSheet}>
             <Plus size={16} />
             방 만들기
@@ -916,7 +1301,10 @@ function FeedScreen({
             key={setlog.id}
             setlog={setlog}
             isFriend={friendIds.includes(setlog.userId) || setlog.userId === currentUser.id}
+            isLiked={likedSetlogIds.has(setlog.id)}
             onReport={onReport}
+            onToggleLike={onToggleLike}
+            onOpenProfile={onOpenProfile}
           />
         ))}
       </section>
@@ -925,6 +1313,9 @@ function FeedScreen({
 }
 
 function RoomsScreen({ rooms, onCreate, onJoin }: { rooms: Room[]; onCreate: () => void; onJoin: (roomId: string) => void }) {
+  const [activeRoomFilter, setActiveRoomFilter] = useState<RoomFilter>("all");
+  const filteredRooms = activeRoomFilter === "all" ? rooms : rooms.filter((room) => room.template === activeRoomFilter);
+
   return (
     <div className="space-y-5 px-4 pb-4 pt-4">
       <section className="flex items-center justify-between">
@@ -936,23 +1327,19 @@ function RoomsScreen({ rooms, onCreate, onJoin }: { rooms: Room[]; onCreate: () 
           <Plus size={24} />
         </button>
       </section>
-      <div className="template-grid">
-        {(Object.keys(roomMeta) as RoomTemplate[]).map((template) => {
-          const Icon = roomMeta[template].icon;
-          const label = template === "meal_room" ? "혼밥방" : template === "after_work_chat_room" ? "퇴근 후 수다방" : "동네 산책방";
-          return (
-            <div className="template-card" key={template}>
-              <span className={`template-icon ${roomMeta[template].tone}`}>
-                <Icon size={18} />
-              </span>
-              <strong>{label}</strong>
-              <span>{roomMeta[template].caption}</span>
-            </div>
-          );
-        })}
+      <div className="filter-row room-filter-row" aria-label="번개방 필터">
+        {roomFilters.map((filter) => (
+          <button
+            key={filter.id}
+            className={`filter-chip ${activeRoomFilter === filter.id ? "active" : ""}`}
+            onClick={() => setActiveRoomFilter(filter.id)}
+          >
+            {filter.label}
+          </button>
+        ))}
       </div>
       <section className="space-y-3">
-        {rooms.map((room) => (
+        {filteredRooms.map((room) => (
           <RoomCard key={room.id} room={room} onJoin={onJoin} />
         ))}
       </section>
@@ -969,9 +1356,7 @@ function ConnectionsScreen({
   setDraft,
   onSend,
   albumItems,
-  selectedSetlogIds,
   setSelectedSetlogIds,
-  baseSetlogId,
   setBaseSetlogId,
   onOpenAi
 }: {
@@ -981,11 +1366,9 @@ function ConnectionsScreen({
   messages: ChatMessage[];
   draft: string;
   setDraft: (text: string) => void;
-  onSend: () => void;
+  onSend: (roomId: string) => void;
   albumItems: AlbumItem[];
-  selectedSetlogIds: string[];
   setSelectedSetlogIds: (ids: string[]) => void;
-  baseSetlogId: string;
   setBaseSetlogId: (id: string) => void;
   onOpenAi: () => void;
 }) {
@@ -994,7 +1377,9 @@ function ConnectionsScreen({
   const firstGroupId = rooms[0]?.id ?? "r_01";
   const [mode, setMode] = useState<ConnectionMode>("friends");
   const [selectedTarget, setSelectedTarget] = useState<ConnectionTarget>({ type: "friend", id: firstFriendId });
-  const chatInputRef = useRef<HTMLInputElement | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isAlbumOpen, setIsAlbumOpen] = useState(false);
+  const [activeSetlogIndex, setActiveSetlogIndex] = useState(0);
   const activeTarget =
     selectedTarget.type === "friend" && friendUsers.some((user) => user.id === selectedTarget.id)
       ? selectedTarget
@@ -1006,29 +1391,43 @@ function ConnectionsScreen({
 
   const selectedFriend = activeTarget.type === "friend" ? getUser(activeTarget.id) : null;
   const selectedRoom = activeTarget.type === "group" ? rooms.find((room) => room.id === activeTarget.id) ?? rooms[0] : null;
-  const targetUserIds = selectedFriend ? [currentUser.id, selectedFriend.id] : selectedRoom?.participantIds ?? [currentUser.id];
+  const targetUserIds = selectedFriend ? [selectedFriend.id] : selectedRoom?.participantIds ?? [currentUser.id];
   const targetSetlogs = setlogs
     .filter((setlog) => targetUserIds.includes(setlog.userId))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const heroSetlog = targetSetlogs[0] ?? setlogs[0];
+  const playableSetlogs = targetSetlogs;
+  const safeSetlogIndex = playableSetlogs.length ? activeSetlogIndex % playableSetlogs.length : 0;
+  const heroSetlog = playableSetlogs[safeSetlogIndex];
   const targetTitle = selectedFriend?.nickname ?? selectedRoom?.title ?? "친구";
   const targetSubtitle = selectedFriend
     ? `${selectedFriend.cityLabel} · ${targetSetlogs.length}개 로그`
     : `${selectedRoom?.cityLabel ?? currentUser.cityLabel} · ${selectedRoom?.participantIds.length ?? 1}명`;
-  const targetAvatars = selectedFriend ? [selectedFriend, currentUser] : (selectedRoom?.participantIds ?? []).map(getUser);
-  const targetRoomId = selectedRoom?.id ?? "c_01";
-  const targetMessages = messages.filter((message) => selectedFriend || message.roomId === targetRoomId || message.roomId === "c_01");
-  const recentMessages = (targetMessages.length ? targetMessages : messages).slice(-3);
-  const latestMessage = messages[messages.length - 1];
+  const targetAvatars = selectedFriend ? [selectedFriend] : (selectedRoom?.participantIds ?? []).map(getUser);
+  const targetRoomId = selectedFriend ? friendChatRoomId(selectedFriend.id) : selectedRoom?.id ?? firstGroupId;
+  const targetMessages = messages.filter((message) => message.roomId === targetRoomId);
+  const chatMessages = targetMessages;
 
   const switchMode = (nextMode: ConnectionMode) => {
     setMode(nextMode);
     setSelectedTarget(nextMode === "friends" ? { type: "friend", id: firstFriendId } : { type: "group", id: firstGroupId });
+    setActiveSetlogIndex(0);
   };
 
-  const toggleSetlog = (id: string) => {
-    setSelectedSetlogIds(selectedSetlogIds.includes(id) ? selectedSetlogIds.filter((item) => item !== id) : [...selectedSetlogIds, id]);
+  const handleSelectTarget = (target: ConnectionTarget) => {
+    setSelectedTarget(target);
+    setActiveSetlogIndex(0);
   };
+
+  const showNextSetlog = () => {
+    if (playableSetlogs.length <= 1) return;
+    setActiveSetlogIndex((index) => (index + 1) % playableSetlogs.length);
+  };
+
+  useEffect(() => {
+    if (heroSetlog?.mediaUrl || playableSetlogs.length <= 1) return undefined;
+    const timer = window.setTimeout(showNextSetlog, 4000);
+    return () => window.clearTimeout(timer);
+  }, [heroSetlog?.id, heroSetlog?.mediaUrl, playableSetlogs.length]);
 
   const handleMeetupNow = () => {
     const ids = targetSetlogs.slice(0, 4).map((setlog) => setlog.id);
@@ -1043,7 +1442,7 @@ function ConnectionsScreen({
       <section className="connections-header">
         <div>
           <h2 className="page-title">친구와 그룹</h2>
-          <p className="helper-copy">대화와 로그를 한 화면에서 이어봐요.</p>
+          <p className="helper-copy">로그와 앨범을 한 화면에서 이어봐요.</p>
         </div>
         <span className="credit-pill">크레딧 10</span>
       </section>
@@ -1057,25 +1456,26 @@ function ConnectionsScreen({
         </button>
       </div>
 
-      <section className="thread-list" aria-label={mode === "friends" ? "친구 채팅 목록" : "그룹 채팅 목록"}>
+      <section className="thread-list" aria-label={mode === "friends" ? "친구 목록" : "그룹 목록"}>
         {mode === "friends" &&
           friendUsers.map((friend) => {
-            const count = setlogs.filter((setlog) => setlog.userId === friend.id || setlog.userId === currentUser.id).length;
+            const count = setlogs.filter((setlog) => setlog.userId === friend.id).length;
             const selected = activeTarget.type === "friend" && activeTarget.id === friend.id;
-            const latestSetlog = setlogs.find((setlog) => setlog.userId === friend.id || setlog.userId === currentUser.id);
+            const latestSetlog = setlogs.find((setlog) => setlog.userId === friend.id);
+            const latestFriendMessage = messages.filter((message) => message.roomId === friendChatRoomId(friend.id)).at(-1);
             return (
               <button
                 key={friend.id}
                 className={`thread-row ${selected ? "selected" : ""}`}
-                onClick={() => setSelectedTarget({ type: "friend", id: friend.id })}
+                onClick={() => handleSelectTarget({ type: "friend", id: friend.id })}
               >
                 <UserAvatar user={friend} className={selected ? "active" : ""} />
                 <div className="thread-copy">
                   <div>
                     <strong>{friend.nickname}</strong>
-                    <span>{latestMessage?.createdAt ?? "방금"}</span>
+                    <span>{latestFriendMessage?.createdAt ?? "방금"}</span>
                   </div>
-                  <p>{latestSetlog?.caption ?? latestMessage?.text ?? "최근 로그를 확인해보세요"}</p>
+                  <p>{latestFriendMessage?.text ?? latestSetlog?.caption ?? "최근 로그를 확인해보세요"}</p>
                 </div>
                 <small>{count}개</small>
               </button>
@@ -1086,11 +1486,12 @@ function ConnectionsScreen({
             const selected = activeTarget.type === "group" && activeTarget.id === room.id;
             const participants = room.participantIds.map(getUser);
             const roomSetlogs = setlogs.filter((setlog) => room.participantIds.includes(setlog.userId));
+            const latestGroupMessage = messages.filter((message) => message.roomId === room.id).at(-1);
             return (
               <button
                 key={room.id}
                 className={`thread-row ${selected ? "selected" : ""}`}
-                onClick={() => setSelectedTarget({ type: "group", id: room.id })}
+                onClick={() => handleSelectTarget({ type: "group", id: room.id })}
               >
                 <div className="connection-avatar-stack">
                   {participants.slice(0, 3).map((participant) => (
@@ -1103,6 +1504,7 @@ function ConnectionsScreen({
                     <span>{room.cityLabel}</span>
                   </div>
                   <p>{room.message}</p>
+                  {latestGroupMessage && <p>{latestGroupMessage.text}</p>}
                 </div>
                 <small>{roomSetlogs.length}개</small>
               </button>
@@ -1114,7 +1516,15 @@ function ConnectionsScreen({
         <div className="connection-viewer">
           <div className="connection-media">
             {heroSetlog?.mediaUrl ? (
-              <video src={heroSetlog.mediaUrl} poster={heroSetlog.thumbnailUrl} autoPlay muted loop playsInline />
+              <video
+                key={heroSetlog.id}
+                src={heroSetlog.mediaUrl}
+                poster={heroSetlog.thumbnailUrl}
+                autoPlay
+                muted
+                playsInline
+                onEnded={showNextSetlog}
+              />
             ) : (
               <img src={heroSetlog?.thumbnailUrl ?? media.generated} alt={`${targetTitle} 로그`} />
             )}
@@ -1125,15 +1535,19 @@ function ConnectionsScreen({
                     <UserAvatar key={user.id} user={user} className="participant-avatar" />
                   ))}
                 </div>
-                <span>{targetSubtitle}</span>
+                <span>{targetSubtitle}{playableSetlogs.length > 1 ? ` · ${safeSetlogIndex + 1}/${playableSetlogs.length}` : ""}</span>
               </div>
               <div>
                 <h3>{targetTitle}</h3>
                 <p>{heroSetlog?.caption ?? "아직 올라온 로그가 없어요."}</p>
                 <div className="viewer-actions">
-                  <button className="viewer-action" onClick={() => chatInputRef.current?.focus()}>
+                  <button className="viewer-action" onClick={() => setIsChatOpen(true)}>
                     <MessageCircle size={17} />
                     채팅
+                  </button>
+                  <button className="viewer-action" onClick={() => setIsAlbumOpen(true)}>
+                    <ImagePlus size={17} />
+                    앨범
                   </button>
                   <button className="viewer-action light" onClick={handleMeetupNow} disabled={targetSetlogs.length < 2}>
                     <Sparkles size={17} />
@@ -1144,93 +1558,138 @@ function ConnectionsScreen({
             </div>
           </div>
         </div>
-        <div className="viewer-chat-panel">
-          <div className="viewer-message-row">
-            {recentMessages.map((message) => (
-              <span key={message.id} className={message.senderId === currentUser.id ? "mine" : ""}>
-                {message.text}
-              </span>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              ref={chatInputRef}
-              className="chat-input"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onSend();
-              }}
-              aria-label={`${targetTitle}에게 보낼 메시지`}
-            />
-            <button className="send-button" onClick={onSend} aria-label="보내기">
-              <ChevronRight size={22} />
-            </button>
-          </div>
-        </div>
-        <div className="connection-tool-panel">
-          <button className="meetup-button" onClick={handleMeetupNow} disabled={targetSetlogs.length < 2}>
-            <Wand2 size={18} />
-            밋업 나우!
-            <span>크레딧 10</span>
-          </button>
-          <div className="mini-album-strip">
-            {albumItems.slice(0, 3).map((item) => (
-              <img key={item.id} src={item.imageUrl} alt={item.title} />
-            ))}
-          </div>
-        </div>
       </section>
 
-      <section className="ai-hero">
-        <div>
-          <p className="text-[12px] font-extrabold text-coral">AI 사진</p>
-          <h3 className="section-title">밋업 나우!</h3>
-          <p className="helper-copy">선택한 로그를 한 장소에 모인 사진처럼 만들어요.</p>
-        </div>
-        <button className="accent-button" onClick={onOpenAi} disabled={selectedSetlogIds.length < 2}>
-          <Wand2 size={18} />
-          밋업 나우!
-        </button>
-      </section>
+      {isChatOpen && (
+        <ChatSheet
+          title={targetTitle}
+          subtitle={targetSubtitle}
+          avatars={targetAvatars}
+          messages={chatMessages}
+          draft={draft}
+          setDraft={setDraft}
+          onSend={() => onSend(targetRoomId)}
+          onClose={() => setIsChatOpen(false)}
+        />
+      )}
+      {isAlbumOpen && <AlbumSheet albumItems={albumItems} onClose={() => setIsAlbumOpen(false)} />}
+    </div>
+  );
+}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="section-title">밋업에 담을 로그</h3>
-          <span className="text-[12px] font-extrabold text-muted">{selectedSetlogIds.length}개 선택</span>
-        </div>
-        <div className="select-grid compact">
-          {setlogs.slice(0, 6).map((setlog) => (
-            <div
-              key={setlog.id}
-              className={`select-card ${selectedSetlogIds.includes(setlog.id) ? "selected" : ""} ${baseSetlogId === setlog.id ? "base" : ""}`}
-            >
-              <button className="w-full text-left" onClick={() => toggleSetlog(setlog.id)}>
-                <img src={setlog.thumbnailUrl} alt={`${getUser(setlog.userId).nickname} 로그`} />
-                <strong>{getUser(setlog.userId).nickname}</strong>
-              </button>
-              <button className="base-button" onClick={() => setBaseSetlogId(setlog.id)}>
-                기준 장소
-              </button>
-            </div>
+function AlbumSheet({ albumItems, onClose }: { albumItems: AlbumItem[]; onClose: () => void }) {
+  return (
+    <BottomSheet title="앨범" onClose={onClose}>
+      {albumItems.length ? (
+        <div className="album-sheet-grid">
+          {albumItems.map((item) => (
+            <article key={item.id} className="album-card">
+              <img src={item.imageUrl} alt={item.title} />
+              <div className="p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <strong>{item.title}</strong>
+                  <span className={item.type === "ai_group_photo" ? "ai-badge" : "frame-badge"}>
+                    {item.type === "ai_group_photo" ? "AI" : "로그"}
+                  </span>
+                </div>
+                <p>{item.type === "ai_group_photo" ? "밋업 나우!로 만든 장면" : "다인가구에서 남긴 순간"}</p>
+              </div>
+            </article>
           ))}
         </div>
-      </section>
+      ) : (
+        <section className="album-empty">
+          <span>
+            <ImagePlus size={28} />
+          </span>
+          <h3>아직 앨범이 없어요</h3>
+          <p>셋로그에서 밋업 나우!를 만들면 여기에 저장돼요.</p>
+        </section>
+      )}
+    </BottomSheet>
+  );
+}
 
-      <section className="space-y-3">
-        <h3 className="section-title">앨범</h3>
-        {albumItems.map((item) => (
-          <article key={item.id} className="album-card">
-            <img src={item.imageUrl} alt={item.title} />
-            <div className="p-3">
-              <div className="flex items-center justify-between gap-2">
-                <strong>{item.title}</strong>
-                <span className={item.type === "ai_group_photo" ? "ai-badge" : "frame-badge"}>{item.type === "ai_group_photo" ? "AI" : "로그"}</span>
-              </div>
-              <p>{item.type === "ai_group_photo" ? "밋업 나우!로 만든 장면" : "다인가구에서 남긴 순간"}</p>
+function ChatSheet({
+  title,
+  subtitle,
+  avatars,
+  messages,
+  draft,
+  setDraft,
+  onSend,
+  onClose
+}: {
+  title: string;
+  subtitle: string;
+  avatars: User[];
+  messages: ChatMessage[];
+  draft: string;
+  setDraft: (text: string) => void;
+  onSend: () => void;
+  onClose: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    window.setTimeout(() => inputRef.current?.focus(), 80);
+  }, []);
+
+  return (
+    <div className="sheet-backdrop" role="presentation" onClick={onClose}>
+      <section className="bottom-sheet chat-bottom-sheet" role="dialog" aria-modal="true" aria-label={`${title} 채팅`} onClick={(event) => event.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="chat-sheet-header">
+          <div className="connection-avatar-stack">
+            {avatars.slice(0, 4).map((user) => (
+              <UserAvatar key={user.id} user={user} className="participant-avatar" />
+            ))}
+          </div>
+          <div className="min-w-0">
+            <h2>{title}</h2>
+            <p>{subtitle}</p>
+          </div>
+          <button className="icon-soft" onClick={onClose} aria-label="닫기">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="chat-sheet-messages">
+          {messages.length === 0 && (
+            <div className="chat-empty">
+              <MessageCircle size={22} />
+              <span>아직 대화가 없어요.</span>
             </div>
-          </article>
-        ))}
+          )}
+          {messages.map((message) => {
+            const mine = message.senderId === currentUser.id;
+            return (
+              <div key={message.id} className={`chat-line ${mine ? "mine" : ""}`}>
+                {!mine && <UserAvatar user={getUser(message.senderId)} className="small" />}
+                <div className={`chat-bubble ${mine ? "mine" : ""}`}>
+                  <p>{message.text}</p>
+                  <span>{message.createdAt}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="chat-sheet-input">
+          <input
+            ref={inputRef}
+            className="chat-input"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") onSend();
+            }}
+            aria-label={`${title}에게 보낼 메시지`}
+          />
+          <button className="send-button" onClick={onSend} aria-label="보내기">
+            <ChevronRight size={22} />
+          </button>
+        </div>
       </section>
     </div>
   );
@@ -1385,6 +1844,7 @@ function MoreScreen({
 }) {
   const filterLabel = filters.find((filter) => filter.id === activeFilter)?.label ?? "전체";
   const topicLabel = topicFilters.find((topic) => topic.id === activeTopic)?.label ?? "전체";
+  const [activeMoreAction, setActiveMoreAction] = useState<MoreAction | null>(null);
 
   return (
     <div className="more-screen">
@@ -1396,7 +1856,7 @@ function MoreScreen({
             <p>{currentUser.cityLabel}에서 오늘의 로그를 남기는 중</p>
           </div>
         </div>
-        <button className="ghost-button">
+        <button className="ghost-button" onClick={() => setActiveMoreAction("profile")}>
           프로필 관리
           <ChevronRight size={16} />
         </button>
@@ -1420,7 +1880,7 @@ function MoreScreen({
       <section className="more-panel">
         <h3>내 로그 설정</h3>
         <div className="settings-list">
-          <button className="settings-row">
+          <button className="settings-row" onClick={() => setActiveMoreAction("neighborhood")}>
             <span className="settings-icon">
               <MapPin size={18} />
             </span>
@@ -1430,7 +1890,7 @@ function MoreScreen({
             </span>
             <ChevronRight size={18} />
           </button>
-          <button className="settings-row">
+          <button className="settings-row" onClick={() => setActiveMoreAction("feed")}>
             <span className="settings-icon">
               <Users size={18} />
             </span>
@@ -1440,7 +1900,7 @@ function MoreScreen({
             </span>
             <ChevronRight size={18} />
           </button>
-          <button className="settings-row">
+          <button className="settings-row" onClick={() => setActiveMoreAction("notifications")}>
             <span className="settings-icon">
               <Bell size={18} />
             </span>
@@ -1456,7 +1916,7 @@ function MoreScreen({
       <section className="more-panel">
         <h3>안전과 도움말</h3>
         <div className="settings-list">
-          <button className="settings-row">
+          <button className="settings-row" onClick={() => setActiveMoreAction("reports")}>
             <span className="settings-icon coral">
               <ShieldCheck size={18} />
             </span>
@@ -1466,7 +1926,7 @@ function MoreScreen({
             </span>
             <ChevronRight size={18} />
           </button>
-          <button className="settings-row">
+          <button className="settings-row" onClick={() => setActiveMoreAction("support")}>
             <span className="settings-icon coral">
               <MessageCircle size={18} />
             </span>
@@ -1483,27 +1943,198 @@ function MoreScreen({
         <img src={brandLogo} alt="다인가구" />
         <span>오늘도 함께 기록 중</span>
       </section>
+      {activeMoreAction && (
+        <MoreActionSheet
+          action={activeMoreAction}
+          nickname={nickname}
+          filterLabel={filterLabel}
+          topicLabel={topicLabel}
+          friendCount={friendCount}
+          roomCount={roomCount}
+          albumCount={albumCount}
+          onClose={() => setActiveMoreAction(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function MoreActionSheet({
+  action,
+  nickname,
+  filterLabel,
+  topicLabel,
+  friendCount,
+  roomCount,
+  albumCount,
+  onClose
+}: {
+  action: MoreAction;
+  nickname: string;
+  filterLabel: string;
+  topicLabel: string;
+  friendCount: number;
+  roomCount: number;
+  albumCount: number;
+  onClose: () => void;
+}) {
+  const content: Record<MoreAction, { title: string; icon: typeof Users; body: React.ReactNode }> = {
+    profile: {
+      title: "프로필 관리",
+      icon: Users,
+      body: (
+        <>
+          <section className="more-action-profile">
+            <UserAvatar user={currentUser} className="active more-action-avatar" />
+            <div className="min-w-0">
+              <h3>{nickname}</h3>
+              <p>{currentUser.cityLabel} · 여성 · 익명 프로필</p>
+            </div>
+          </section>
+          <div className="more-action-grid">
+            <span>닉네임</span>
+            <strong>{nickname}</strong>
+            <span>프로필 공개</span>
+            <strong>친구와 동네</strong>
+            <span>소개</span>
+            <strong>{currentUser.bio}</strong>
+          </div>
+        </>
+      )
+    },
+    neighborhood: {
+      title: "동네 범위",
+      icon: MapPin,
+      body: (
+        <>
+          <div className="more-action-map">
+            <MapPin size={26} />
+            <strong>{currentUser.cityLabel}</strong>
+          </div>
+          <div className="segmented">
+            <button className="active">가까운 동네</button>
+            <button>넓게 보기</button>
+          </div>
+          <p className="more-action-copy">현재 동네를 중심으로 번개방과 공개 로그를 먼저 보여주고 있어요.</p>
+        </>
+      )
+    },
+    feed: {
+      title: "피드 필터",
+      icon: Users,
+      body: (
+        <>
+          <div className="more-action-grid">
+            <span>관계 필터</span>
+            <strong>{filterLabel}</strong>
+            <span>로그 주제</span>
+            <strong>{topicLabel}</strong>
+            <span>정렬</span>
+            <strong>최근 올라온 순</strong>
+          </div>
+          <div className="more-action-chips">
+            {filters.map((filter) => (
+              <span key={filter.id} className={filter.label === filterLabel ? "active" : ""}>{filter.label}</span>
+            ))}
+          </div>
+        </>
+      )
+    },
+    notifications: {
+      title: "알림 설정",
+      icon: Bell,
+      body: (
+        <div className="more-toggle-list">
+          <div><span>친구 새 로그</span><strong>켜짐</strong></div>
+          <div><span>번개방 참여</span><strong>켜짐</strong></div>
+          <div><span>밋업 나우! 완료</span><strong>켜짐</strong></div>
+        </div>
+      )
+    },
+    reports: {
+      title: "신고 내역",
+      icon: ShieldCheck,
+      body: (
+        <div className="more-timeline">
+          <article>
+            <strong>접수된 신고가 없어요</strong>
+            <p>불편한 로그를 신고하면 이곳에서 처리 상태를 확인할 수 있어요.</p>
+          </article>
+          <article>
+            <strong>Gemini 안전 검토 활성화</strong>
+            <p>이미지와 채팅을 실시간으로 살피고 있어요.</p>
+          </article>
+        </div>
+      )
+    },
+    support: {
+      title: "문의하기",
+      icon: MessageCircle,
+      body: (
+        <>
+          <textarea className="textarea" defaultValue="다인가구를 사용하면서 궁금한 점이 있어요." rows={4} />
+          <button className="primary-button" onClick={onClose}>
+            문의 보내기
+          </button>
+        </>
+      )
+    }
+  };
+  const selected = content[action];
+  const Icon = selected.icon;
+
+  return (
+    <BottomSheet title={selected.title} onClose={onClose}>
+      <section className="more-action-summary">
+        <span>
+          <Icon size={22} />
+        </span>
+        <div>
+          <strong>{friendCount}명 친구 · {roomCount}개 번개방</strong>
+          <p>{albumCount}개의 사진과 로그가 연결되어 있어요.</p>
+        </div>
+      </section>
+      {selected.body}
+    </BottomSheet>
   );
 }
 
 function SetlogCard({
   setlog,
   isFriend,
-  onReport
+  isLiked,
+  onReport,
+  onToggleLike,
+  onOpenProfile
 }: {
   setlog: Setlog;
   isFriend: boolean;
+  isLiked: boolean;
   onReport: (setlogId: string) => void;
+  onToggleLike: (setlogId: string) => void;
+  onOpenProfile: (userId: string) => void;
 }) {
   const user = getUser(setlog.userId);
+  const isUploadingSetlog = setlog.uploadState === "uploading" || setlog.uploadState === "reviewing";
+  const isFailedSetlog = setlog.uploadState === "failed";
+  const stateLabel = isFailedSetlog ? setlog.uploadMessage : isUploadingSetlog ? setlog.uploadMessage ?? "업로드 및 검토 중" : "";
+  const canOpenProfile = !setlog.uploadState;
   return (
-    <article className="log-card">
+    <article
+      className={`log-card ${canOpenProfile ? "clickable" : ""} ${isUploadingSetlog ? "reviewing" : ""} ${isFailedSetlog ? "failed" : ""}`}
+      onClick={canOpenProfile ? () => onOpenProfile(setlog.userId) : undefined}
+    >
       <div className="media-wrap">
         {setlog.mediaUrl ? (
           <video src={setlog.mediaUrl} poster={setlog.thumbnailUrl} autoPlay muted loop playsInline />
         ) : (
           <img src={setlog.thumbnailUrl} alt={`${user.nickname}의 로그`} />
+        )}
+        {stateLabel && (
+          <div className={`upload-state-badge ${isFailedSetlog ? "failed" : ""}`}>
+            {isUploadingSetlog && <span className="upload-spinner" />}
+            <span>{stateLabel}</span>
+          </div>
         )}
         <div className="video-social-overlay">
           <div className="min-w-0">
@@ -1519,11 +2150,31 @@ function SetlogCard({
             </div>
             <p>{setlog.caption}</p>
           </div>
-          <div className="video-actions">
-            <button className="video-action" onClick={() => onReport(setlog.id)} aria-label="신고하기">
-              <Flag size={17} />
-            </button>
-          </div>
+          {setlog.moderationStatus === "approved" && (
+            <div className="video-actions">
+              <button
+                className={`video-action like ${isLiked ? "active" : ""}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleLike(setlog.id);
+                }}
+                aria-label={isLiked ? "하트 취소" : "하트"}
+              >
+                <Heart size={16} fill={isLiked ? "currentColor" : "none"} />
+                <span>{setlog.likeCount}</span>
+              </button>
+              <button
+                className="video-action"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onReport(setlog.id);
+                }}
+                aria-label="신고하기"
+              >
+                <Flag size={17} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </article>
@@ -1622,8 +2273,11 @@ function UploadSheet({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const stopTimerRef = useRef<number | null>(null);
+  const firstThumbnailRef = useRef<string | null>(null);
+  const suggestionRequestRef = useRef(0);
   const [cameraState, setCameraState] = useState<"requesting" | "ready" | "recording" | "recorded" | "denied" | "unsupported">("requesting");
   const [capture, setCapture] = useState<RecordedSetlogCapture | null>(null);
+  const [captionSuggestion, setCaptionSuggestion] = useState<CaptionSuggestionState>({ status: "idle" });
 
   const stopTimers = () => {
     if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
@@ -1644,6 +2298,8 @@ function UploadSheet({
 
     setCameraState("requesting");
     setCapture(null);
+    suggestionRequestRef.current += 1;
+    setCaptionSuggestion({ status: "idle" });
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -1668,6 +2324,7 @@ function UploadSheet({
     void requestCamera();
 
     return () => {
+      suggestionRequestRef.current += 1;
       stopTimers();
       recorderRef.current = null;
       stopCamera();
@@ -1684,6 +2341,35 @@ function UploadSheet({
     return canvas.toDataURL("image/jpeg", 0.86);
   };
 
+  const requestCaptionSuggestion = async (thumbnailUrl: string) => {
+    const requestId = suggestionRequestRef.current + 1;
+    suggestionRequestRef.current = requestId;
+    setCaptionSuggestion({ status: "loading" });
+    try {
+      const imageBlob = await dataUrlToBlob(thumbnailUrl);
+      if (suggestionRequestRef.current !== requestId) return;
+      const suggestion = await api.suggestSetlogCaption(imageBlob);
+      if (suggestionRequestRef.current !== requestId) return;
+      if (!suggestion) {
+        setCaptionSuggestion({ status: "failed", message: "추천을 불러오지 못했어요." });
+        return;
+      }
+      if (suggestion.safetyStatus === "blocked") {
+        setCaptionSuggestion({ status: "blocked", message: suggestion.reason || "이 장면으로는 추천을 만들 수 없어요." });
+        return;
+      }
+      if (suggestion.suggestedCaption) {
+        setCaptionSuggestion({ status: "ready", caption: suggestion.suggestedCaption });
+        return;
+      }
+      setCaptionSuggestion({ status: "failed", message: "추천을 불러오지 못했어요." });
+    } catch {
+      if (suggestionRequestRef.current === requestId) {
+        setCaptionSuggestion({ status: "failed", message: "추천을 불러오지 못했어요." });
+      }
+    }
+  };
+
   const startRecording = async () => {
     if (cameraState === "recording") return;
     if (!streamRef.current) {
@@ -1697,6 +2383,7 @@ function UploadSheet({
     const recorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined);
     chunksRef.current = [];
     recorderRef.current = recorder;
+    firstThumbnailRef.current = captureThumbnail();
 
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) chunksRef.current.push(event.data);
@@ -1707,13 +2394,15 @@ function UploadSheet({
       const type = (recorder.mimeType || "video/webm").split(";", 1)[0] || "video/webm";
       const videoBlob = new Blob(chunksRef.current, { type });
       const videoUrl = URL.createObjectURL(videoBlob);
-      const thumbnailUrl = captureThumbnail();
+      const thumbnailUrl = firstThumbnailRef.current ?? captureThumbnail();
       setCapture({ videoBlob, videoUrl, thumbnailUrl });
+      void requestCaptionSuggestion(thumbnailUrl);
       setCameraState("recorded");
       stopCamera();
     };
 
     setCapture(null);
+    setCaptionSuggestion({ status: "idle" });
     setCameraState("recording");
     recorder.start();
     stopTimerRef.current = window.setTimeout(() => {
@@ -1766,6 +2455,25 @@ function UploadSheet({
       </div>
       <label className="field-label">한 줄 상태</label>
       <textarea className="textarea" value={caption} onChange={(event) => setCaption(event.target.value)} rows={3} />
+      {captionSuggestion.status !== "idle" && (
+        <div className={`caption-suggestion ${captionSuggestion.status}`}>
+          <span className="caption-suggestion-icon">
+            <Sparkles size={16} />
+          </span>
+          <div className="min-w-0">
+            <strong>추천 한 줄</strong>
+            {captionSuggestion.status === "loading" && <p>첫 장면을 보고 추천을 만들고 있어요.</p>}
+            {captionSuggestion.status === "ready" && <p>{captionSuggestion.caption}</p>}
+            {captionSuggestion.status === "blocked" && <p>{captionSuggestion.message}</p>}
+            {captionSuggestion.status === "failed" && <p>{captionSuggestion.message}</p>}
+          </div>
+          {captionSuggestion.status === "ready" && (
+            <button className="suggestion-apply" onClick={() => setCaption(captionSuggestion.caption)}>
+              적용
+            </button>
+          )}
+        </div>
+      )}
       <label className="field-label">공개 범위</label>
       <div className="segmented">
         <button className={visibility === "public" ? "active" : ""} onClick={() => setVisibility("public")}>공개</button>
@@ -1792,6 +2500,9 @@ function RoomSheet({
   setMessage,
   roomHours,
   setRoomHours,
+  friends,
+  selectedFriendIds,
+  setSelectedFriendIds,
   onClose,
   onSubmit
 }: {
@@ -1801,22 +2512,28 @@ function RoomSheet({
   setMessage: (message: string) => void;
   roomHours: 1 | 2 | 3;
   setRoomHours: (hours: 1 | 2 | 3) => void;
+  friends: User[];
+  selectedFriendIds: string[];
+  setSelectedFriendIds: (ids: string[]) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const toggleFriend = (id: string) => {
+    setSelectedFriendIds(selectedFriendIds.includes(id) ? selectedFriendIds.filter((item) => item !== id) : [...selectedFriendIds, id]);
+  };
+
   return (
-    <BottomSheet title="번개방 만들기" onClose={onClose}>
+    <BottomSheet title="그룹 만들기" onClose={onClose}>
       <div className="space-y-2">
         {(Object.keys(roomMeta) as RoomTemplate[]).map((template) => {
           const Icon = roomMeta[template].icon;
-          const label = template === "meal_room" ? "혼밥방" : template === "after_work_chat_room" ? "퇴근 후 수다방" : "동네 산책방";
           return (
             <button key={template} className={`sheet-row ${roomTemplate === template ? "selected" : ""}`} onClick={() => setRoomTemplate(template)}>
               <span className={`template-icon ${roomMeta[template].tone}`}>
                 <Icon size={18} />
               </span>
               <span>
-                <strong>{label}</strong>
+                <strong>{templateTitle(template)}</strong>
                 <small>{roomMeta[template].caption}</small>
               </span>
             </button>
@@ -1825,6 +2542,25 @@ function RoomSheet({
       </div>
       <label className="field-label">한 줄 메시지</label>
       <input className="text-input" value={message} onChange={(event) => setMessage(event.target.value)} />
+      <div className="flex items-center justify-between">
+        <label className="field-label">친구 초대</label>
+        <span className="text-[12px] font-extrabold text-muted">{selectedFriendIds.length}명 선택</span>
+      </div>
+      <div className="friend-picker">
+        {friends.map((friend) => {
+          const selected = selectedFriendIds.includes(friend.id);
+          return (
+            <button key={friend.id} className={`friend-pick-row ${selected ? "selected" : ""}`} onClick={() => toggleFriend(friend.id)}>
+              <UserAvatar user={friend} />
+              <span>
+                <strong>{friend.nickname}</strong>
+                <small>{friend.cityLabel}</small>
+              </span>
+              <span className="pick-check">{selected ? "선택됨" : "초대"}</span>
+            </button>
+          );
+        })}
+      </div>
       <label className="field-label">만료 시간</label>
       <div className="segmented">
         {[1, 2, 3].map((value) => (
@@ -1839,7 +2575,7 @@ function RoomSheet({
       </div>
       <button className="primary-button" onClick={onSubmit}>
         <Users size={18} />
-        방 카드 열기
+        그룹 열기
       </button>
     </BottomSheet>
   );
@@ -1848,12 +2584,20 @@ function RoomSheet({
 function AiSheet({
   selectedSetlogs,
   baseSetlogId,
+  setBaseSetlogId,
+  aiStyle,
+  setAiStyle,
+  generation,
   onClose,
   onGenerate,
   isGenerating
 }: {
   selectedSetlogs: Setlog[];
   baseSetlogId: string;
+  setBaseSetlogId: (id: string) => void;
+  aiStyle: AiStyle;
+  setAiStyle: (style: AiStyle) => void;
+  generation: AiGenerationState;
   onClose: () => void;
   onGenerate: () => void;
   isGenerating: boolean;
@@ -1861,21 +2605,68 @@ function AiSheet({
   const base = selectedSetlogs.find((setlog) => setlog.id === baseSetlogId) ?? selectedSetlogs[0];
   return (
     <BottomSheet title="밋업 나우!" onClose={onClose}>
+      <div className="ai-style-switch" aria-label="밋업 나우 스타일">
+        <button className={aiStyle === "default" ? "active" : ""} onClick={() => setAiStyle("default")} disabled={isGenerating}>
+          <span>기본</span>
+          <strong>한 장소에 함께</strong>
+        </button>
+        <button className={aiStyle === "memo" ? "active" : ""} onClick={() => setAiStyle("memo")} disabled={isGenerating}>
+          <span>메모</span>
+          <strong>흰색 손글씨 주석</strong>
+        </button>
+        <button className={aiStyle === "3d" ? "active" : ""} onClick={() => setAiStyle("3d")} disabled={isGenerating}>
+          <span>3D</span>
+          <strong>공간 재구성</strong>
+        </button>
+      </div>
       <div className="ai-preview">
         {selectedSetlogs.map((setlog) => (
-          <div key={setlog.id} className={setlog.id === base?.id ? "base" : ""}>
+          <button
+            key={setlog.id}
+            type="button"
+            className={setlog.id === base?.id ? "base" : ""}
+            onClick={() => setBaseSetlogId(setlog.id)}
+            disabled={isGenerating}
+            aria-pressed={setlog.id === base?.id}
+          >
             <img src={setlog.thumbnailUrl} alt={`${getUser(setlog.userId).nickname} 로그`} />
             <span>{setlog.id === base?.id ? "기준 장소" : getUser(setlog.userId).nickname}</span>
-          </div>
+          </button>
         ))}
       </div>
+      {generation.status !== "idle" && (
+        <section className={`ai-generation-card ${generation.status}`}>
+          {generation.status === "base-generating" && <div className="ai-generation-placeholder"><span /></div>}
+          {"imageUrl" in generation && generation.imageUrl && (
+            <div className="ai-generation-image">
+              <img src={generation.imageUrl} alt={generation.status === "completed" ? generation.title : "생성 중인 밋업 사진"} />
+              {generation.status === "memo-generating" && (
+                <span className="ai-generation-badge">
+                  <Sparkles size={14} />
+                  {generation.style === "3d" ? "3D 생성 중" : "메모 생성 중"}
+                </span>
+              )}
+            </div>
+          )}
+          <div>
+            <strong>{generation.status === "completed" ? generation.title : generation.status === "failed" ? "생성 확인 필요" : "이미지 생성 중"}</strong>
+            <p>{generation.message}</p>
+          </div>
+        </section>
+      )}
       <div className="credit-panel">
         <span>크레딧: 10개</span>
         <strong>사용 시 1개 차감</strong>
       </div>
       <div className="notice-box">
         <Sparkles size={17} />
-        <span>각자의 셋로그를 한 장소에 실제로 모인 사진처럼 만들어볼까요?</span>
+        <span>
+          {aiStyle === "memo"
+            ? "기본 사진을 만든 뒤 손글씨 메모 버전을 이어서 만들어요."
+            : aiStyle === "3d"
+              ? "기본 사진을 만든 뒤 고품질 3D 재구성 버전을 이어서 만들어요."
+              : "각자의 셋로그를 한 장소에 실제로 모인 사진처럼 만들어볼까요?"}
+        </span>
       </div>
       <div className="confirm-actions">
         <button className="ghost-button" onClick={onClose} disabled={isGenerating}>
@@ -1883,9 +2674,87 @@ function AiSheet({
         </button>
         <button className="accent-button" onClick={onGenerate} disabled={isGenerating}>
           <Wand2 size={18} />
-          {isGenerating ? "만드는 중" : "예, 만들기"}
+          {isGenerating ? "만드는 중" : aiStyle === "memo" ? "메모 버전 만들기" : aiStyle === "3d" ? "3D 버전 만들기" : "예, 만들기"}
         </button>
       </div>
+    </BottomSheet>
+  );
+}
+
+function ProfileSheet({
+  user,
+  isFriend,
+  setlogs,
+  onClose,
+  onAddFriend
+}: {
+  user: User;
+  isFriend: boolean;
+  setlogs: Setlog[];
+  onClose: () => void;
+  onAddFriend: () => void;
+}) {
+  const latest = setlogs[0];
+  const topicLabel = latest ? (topicFilters.find((topic) => topic.id === latest.topic)?.label ?? "로그") : "로그";
+
+  return (
+    <BottomSheet title="프로필" onClose={onClose}>
+      <section className="profile-card">
+        <div className="profile-hero">
+          <img src={user.profileImageUrl} alt="" />
+          <div className="profile-hero-shade" />
+          <div className="profile-hero-copy">
+            <UserAvatar user={user} className="profile-avatar-lg" />
+            <div className="min-w-0">
+              <h3>{user.nickname}</h3>
+              <p>{user.cityLabel}</p>
+            </div>
+          </div>
+        </div>
+        <p className="profile-bio">{user.bio}</p>
+        <div className="profile-stats">
+          <div>
+            <strong>{setlogs.length}</strong>
+            <span>로그</span>
+          </div>
+          <div>
+            <strong>{topicLabel}</strong>
+            <span>최근 주제</span>
+          </div>
+          <div>
+            <strong>{isFriend ? "친구" : "새 연결"}</strong>
+            <span>상태</span>
+          </div>
+        </div>
+      </section>
+
+      {latest && (
+        <article className="profile-latest-log">
+          <img src={latest.thumbnailUrl} alt={`${user.nickname} 최근 로그`} />
+          <div className="min-w-0">
+            <strong>최근 로그</strong>
+            <p>{latest.caption}</p>
+          </div>
+        </article>
+      )}
+
+      <button className={isFriend ? "ghost-button w-full" : "primary-button"} onClick={isFriend ? onClose : onAddFriend}>
+        <Users size={18} />
+        {isFriend ? "이미 친구예요" : "친구 추가"}
+      </button>
+    </BottomSheet>
+  );
+}
+
+function NotificationSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <BottomSheet title="알림" onClose={onClose}>
+      <section className="notification-empty">
+        <span>
+          <Bell size={28} />
+        </span>
+        <h3>아직 알림이 없어요!</h3>
+      </section>
     </BottomSheet>
   );
 }
@@ -2054,7 +2923,8 @@ function normalizeSetlogs(payload: unknown): Setlog[] {
         hourSlot: pickString(item, ["hourSlot", "hour_slot"]) ?? "20:00",
         createdAt: pickString(item, ["createdAt", "created_at"]) ?? new Date().toISOString(),
         moderationStatus: moderation === "blocked" ? "blocked" : moderation === "pending" ? "pending" : "approved",
-        isFriend: Boolean(item.isFriend)
+        isFriend: Boolean(item.isFriend),
+        likeCount: pickNumber(item, ["likeCount", "like_count", "likes"]) ?? 0
       } satisfies Setlog;
     })
     .filter((item): item is Setlog => item !== null);
@@ -2178,14 +3048,24 @@ function inferLogTopic(text: string): LogTopic {
 }
 
 function toRoomTemplate(value: string | undefined): RoomTemplate {
-  if (value === "after_work_chat_room" || value === "neighborhood_walk_room" || value === "meal_room") return value;
+  if (value === "after_work_chat_room" || value === "neighborhood_walk_room" || value === "meal_room" || value === "other_room") return value;
+  if (value === "cafe" || value === "call") return "after_work_chat_room";
+  if (value === "walk") return "neighborhood_walk_room";
+  if (value === "other") return "other_room";
   return "meal_room";
 }
 
 function templateTitle(template: RoomTemplate) {
   if (template === "after_work_chat_room") return "퇴근 후 수다방";
   if (template === "neighborhood_walk_room") return "동네 산책방";
+  if (template === "other_room") return "기타";
   return "혼밥방";
+}
+
+function thumbnailForRoomTemplate(template: RoomTemplate) {
+  if (template === "neighborhood_walk_room") return media.walk;
+  if (template === "after_work_chat_room" || template === "other_room") return media.cafe;
+  return media.dinnerB;
 }
 
 function getUser(userId: string) {

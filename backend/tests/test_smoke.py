@@ -1,6 +1,7 @@
 import os
 
 os.environ["GEMINI_API_KEY"] = ""
+os.environ["MOCK_AI"] = "true"
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -9,6 +10,7 @@ from app.database import engine
 from app.database import create_db_and_tables
 from app.main import app
 from app.models import Setlog
+from app.services.image_generation import ImageGenerationService
 from app.seed import seed_database
 
 
@@ -90,6 +92,17 @@ def test_multipart_webm_with_codec_parameter_is_accepted():
     assert item["mediaUrl"].endswith(".webm")
 
 
+def test_caption_suggestion_fallback_without_gemini_key():
+    response = client.post(
+        "/api/setlogs/caption-suggestion",
+        files={"image": ("thumb.jpg", b"fake image", "image/jpeg")},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["safetyStatus"] == "approved"
+    assert body["suggestedCaption"]
+
+
 def test_multipart_setlog_blocked_caption_is_rejected():
     with Session(engine) as session:
         before_count = len(session.exec(select(Setlog)).all())
@@ -103,6 +116,55 @@ def test_multipart_setlog_blocked_caption_is_rejected():
     with Session(engine) as session:
         after_count = len(session.exec(select(Setlog)).all())
     assert after_count == before_count
+
+
+def test_setlog_like_count_increments_and_decrements():
+    before = client.get("/api/setlogs", params={"filter": "all", "userId": "u_01"}).json()["items"]
+    item = next(entry for entry in before if entry["id"] == "s_01")
+    like_count = item["likeCount"]
+
+    liked = client.post("/api/setlogs/s_01/like", json={"liked": True})
+    assert liked.status_code == 200
+    assert liked.json()["likeCount"] == like_count + 1
+
+    unliked = client.post("/api/setlogs/s_01/like", json={"liked": False})
+    assert unliked.status_code == 200
+    assert unliked.json()["likeCount"] == like_count
+
+
+def test_flash_meet_create_preserves_selected_participants():
+    response = client.post(
+        "/api/flash-meets",
+        json={
+            "creatorId": "u_01",
+            "type": "meal",
+            "message": "친구들이랑 저녁 로그 남길 사람",
+            "cityLabel": "성수",
+            "expiresInHours": 1,
+            "participantIds": ["u_02", "u_04", "u_02"],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["item"]["participantIds"] == ["u_01", "u_02", "u_04"]
+
+
+def test_flash_meet_other_type_maps_to_other_room():
+    response = client.post(
+        "/api/flash-meets",
+        json={
+            "creatorId": "u_01",
+            "type": "other",
+            "message": "아무 얘기나 할 사람",
+            "cityLabel": "성수",
+            "expiresInHours": 1,
+            "participantIds": [],
+        },
+    )
+    assert response.status_code == 200
+    item = response.json()["item"]
+    assert item["type"] == "other"
+    assert item["template"] == "other_room"
+    assert item["title"] == "기타"
 
 
 def test_flash_meet_join_and_self_join_error():
@@ -122,16 +184,59 @@ def test_chat_message_creation():
     assert item["text"] == "I am heading out now."
 
 
-def test_mock_ai_group_photo_and_album_query():
+def test_mock_ai_group_photo_generation():
+    assert ImageGenerationService().generate_group_photo("Friendly neighborhood dinner memory", []) == "/uploads/seed/generated-demo.jpg"
+
+
+def test_group_photo_uses_base_setlog_id_contract():
     response = client.post(
         "/api/ai/group-photo",
-        json={"userId": "u_01", "sourceSetlogIds": ["s_01", "s_04"], "prompt": "Friendly neighborhood dinner memory"},
+        json={
+            "userId": "u_01",
+            "sourceSetlogIds": ["s_01", "s_04"],
+            "baseSetlogId": "s_04",
+            "prompt": "친구들이 한 장소에서 만난 자연스러운 사진",
+        },
     )
     assert response.status_code == 200
     body = response.json()
     assert body["generatedImageUrl"] == "/uploads/seed/generated-demo.jpg"
-    album = client.get("/api/album", params={"userId": "u_01"}).json()["items"]
-    assert body["id"] in {item["id"] for item in album}
+    assert body["baseSetlogId"] == "s_04"
+    assert body["sourceSetlogIds"] == ["s_01", "s_04"]
+
+
+def test_group_photo_preview_can_skip_album_persistence():
+    response = client.post(
+        "/api/ai/group-photo",
+        json={
+            "userId": "u_01",
+            "sourceSetlogIds": ["s_01", "s_04"],
+            "baseSetlogId": "s_04",
+            "persist": False,
+            "prompt": "친구들이 한 장소에서 만난 자연스러운 사진",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["generatedImageUrl"] == "/uploads/seed/generated-demo.jpg"
+    assert body["albumItem"] is None
+
+
+def test_mock_ai_memo_photo_generation():
+    response = client.post(
+        "/api/ai/memo-photo",
+        json={
+            "userId": "u_01",
+            "sourceImageUrl": "/uploads/seed/generated-demo.jpg",
+            "sourceSetlogIds": ["s_01", "s_04"],
+            "baseSetlogId": "s_04",
+            "prompt": "흰색 손글씨 메모를 추가해줘",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["generatedImageUrl"] == "/uploads/seed/generated-demo.jpg"
+    assert body["albumItem"]["imageUrl"] == "/uploads/seed/generated-demo.jpg"
 
 
 def test_startup_seeding_is_idempotent():

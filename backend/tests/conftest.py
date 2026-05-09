@@ -7,6 +7,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 os.environ["GEMINI_API_KEY"] = ""
+os.environ["MOCK_AI"] = "true"
 
 from sqlmodel import Session
 
