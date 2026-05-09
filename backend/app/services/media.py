@@ -7,7 +7,9 @@ from fastapi import HTTPException, UploadFile, status
 from app.config import get_settings
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+ALLOWED_VIDEO_TYPES = {"video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov"}
+ALLOWED_MEDIA_TYPES = ALLOWED_IMAGE_TYPES | ALLOWED_VIDEO_TYPES
+MAX_UPLOAD_SIZE = 25 * 1024 * 1024
 
 
 def ensure_upload_dirs() -> None:
@@ -19,12 +21,12 @@ def ensure_upload_dirs() -> None:
 
 
 async def save_upload(file: UploadFile, setlog_id: str) -> str:
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "UNSUPPORTED_MEDIA_TYPE", "message": "Only image uploads are supported."})
+    if file.content_type not in ALLOWED_MEDIA_TYPES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "UNSUPPORTED_MEDIA_TYPE", "message": "Only image and short video uploads are supported."})
     data = await file.read()
     if len(data) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "MEDIA_TOO_LARGE", "message": "Image uploads must be 10MB or smaller."})
-    suffix = ALLOWED_IMAGE_TYPES[file.content_type]
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "MEDIA_TOO_LARGE", "message": "Uploads must be 25MB or smaller."})
+    suffix = ALLOWED_MEDIA_TYPES[file.content_type]
     target = get_settings().upload_path / "setlogs" / f"{setlog_id}{suffix}"
     target.write_bytes(data)
     return f"/uploads/setlogs/{target.name}"

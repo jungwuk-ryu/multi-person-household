@@ -33,6 +33,8 @@ class MediaType(str, Enum):
 
 class SetlogCategory(str, Enum):
     meal = "meal"
+    chat = "chat"
+    walk = "walk"
     daily = "daily"
     exercise = "exercise"
     hobby = "hobby"

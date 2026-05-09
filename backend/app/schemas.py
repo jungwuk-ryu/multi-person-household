@@ -87,11 +87,15 @@ class FlashMeetOut(CamelModel):
     creator_id: str
     creator_name: str | None = None
     type: FlashMeetType
+    template: str | None = None
+    title: str | None = None
     message: str
     city_label: str
     expires_at: datetime
+    expires_in_minutes: int | None = None
     participant_ids: list[str]
     status: FlashMeetStatus
+    thumbnail_url: str | None = None
 
 
 class FlashMeetsResponse(CamelModel):

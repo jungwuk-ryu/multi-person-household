@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from app.crud import friend_ids, get_user_or_404, make_id, setlog_out
 from app.database import get_session
-from app.models import ModerationStatus, Setlog, SetlogCategory, Visibility
+from app.models import MediaType, ModerationStatus, Setlog, SetlogCategory, Visibility
 from app.schemas import SetlogCreateResponse, SetlogFromUrlRequest, SetlogsResponse
 from app.services.media import save_upload, save_url_image
 from app.services.moderation import ModerationService
@@ -27,11 +27,13 @@ def list_setlogs(filter: str = "all", userId: str = "user-mina", session: Sessio
         include = False
         # Keep feed behavior explicit so it stays aligned with the frontend contract.
         if filter == "all":
-            include = setlog.visibility == Visibility.public
+            include = setlog.visibility == Visibility.public or setlog.user_id == current.id or setlog.user_id in friends
         elif filter == "friends":
-            include = setlog.user_id in friends and setlog.user_id != current.id and setlog.visibility in {Visibility.public, Visibility.friends}
+            include = (setlog.user_id in friends or setlog.user_id == current.id) and setlog.visibility in {Visibility.public, Visibility.friends}
         elif filter == "sameGender":
             include = setlog.visibility == Visibility.public and author.gender == current.gender
+        elif filter == "oppositeGender":
+            include = setlog.visibility == Visibility.public and author.gender != current.gender and author.gender.value != "other" and current.gender.value != "other"
         elif filter == "nearby":
             include = setlog.visibility == Visibility.public and author.city_label == current.city_label
         elif filter == "meal":
@@ -59,7 +61,8 @@ async def create_setlog(
     setlog_id = make_id("setlog")
     media_url = await save_upload(media, setlog_id)
     moderation = ModerationService().moderate(media.filename, caption)
-    setlog = Setlog(id=setlog_id, user_id=user.id, media_url=media_url, thumbnail_url=media_url, caption=caption, category=category, visibility=visibility, city_label=cityLabel, hour_slot=_hour_slot(), moderation_status=moderation)
+    media_type = MediaType.video if (media.content_type or "").startswith("video/") else MediaType.image
+    setlog = Setlog(id=setlog_id, user_id=user.id, media_type=media_type, media_url=media_url, thumbnail_url=media_url, caption=caption, category=category, visibility=visibility, city_label=cityLabel, hour_slot=_hour_slot(), moderation_status=moderation)
     session.add(setlog)
     session.commit()
     session.refresh(setlog)

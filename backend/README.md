@@ -1,6 +1,6 @@
-# Setlog Backend
+# 다인가구 Backend
 
-FastAPI MVP backend for the Setlog demo contract.
+FastAPI MVP backend for the 다인가구 demo contract.
 
 ## Install
 

@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     port: int = 8000
     client_origin: str = "http://localhost:5173"
-    database_url: str = "sqlite:///./setlog.db"
+    database_url: str = "sqlite:///./daingagu.db"
     mock_ai: bool = True
     openai_api_key: str = ""
     openai_image_model: str = "gpt-image-1.5"

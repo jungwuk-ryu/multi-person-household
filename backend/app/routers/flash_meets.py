@@ -11,20 +11,50 @@ from app.services.realtime import manager
 
 router = APIRouter(prefix="/api/flash-meets", tags=["flash-meets"])
 
+FLASH_META = {
+    "meal": {
+        "template": "meal_room",
+        "title": "혼밥방",
+        "thumbnail_url": "/uploads/seed/room-meal.webp",
+    },
+    "cafe": {
+        "template": "after_work_chat_room",
+        "title": "퇴근 후 수다방",
+        "thumbnail_url": "/uploads/seed/room-chat.webp",
+    },
+    "walk": {
+        "template": "neighborhood_walk_room",
+        "title": "동네 산책방",
+        "thumbnail_url": "/uploads/seed/room-walk.webp",
+    },
+    "call": {
+        "template": "after_work_chat_room",
+        "title": "퇴근 후 수다방",
+        "thumbnail_url": "/uploads/seed/room-chat.webp",
+    },
+}
+
 
 def flash_out(session: Session, meet: FlashMeet) -> dict:
     # Build one shared shape for REST responses and broadcast payloads.
     creator = get_user_or_404(session, meet.creator_id)
+    meta = FLASH_META.get(meet.type.value, FLASH_META["meal"])
+    expires_at = meet.expires_at if meet.expires_at.tzinfo else meet.expires_at.replace(tzinfo=timezone.utc)
+    remaining = max(0, int((expires_at - datetime.now(timezone.utc)).total_seconds() // 60))
     return {
         "id": meet.id,
         "creator_id": meet.creator_id,
         "creator_name": creator.display_name,
         "type": meet.type,
+        "template": meta["template"],
+        "title": meta["title"],
         "message": meet.message,
         "city_label": meet.city_label,
-        "expires_at": meet.expires_at,
+        "expires_at": expires_at,
+        "expires_in_minutes": remaining,
         "participant_ids": meet.participant_ids,
         "status": meet.status,
+        "thumbnail_url": meta["thumbnail_url"],
     }
 
 

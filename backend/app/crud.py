@@ -44,6 +44,10 @@ def setlog_out(setlog: Setlog, user: User, is_friend: bool | None = None) -> dic
 
 
 def room_id_for(user_a: str, user_b: str) -> str:
+    if {user_a, user_b} == {"u_01", "u_02"}:
+        return "c_01"
+    if {user_a, user_b} == {"u_01", "u_04"}:
+        return "c_02"
     if {user_a, user_b} == {"user-mina", "user-jun"}:
         return "chat-mina-jun"
     first, second = sorted([user_a, user_b])
