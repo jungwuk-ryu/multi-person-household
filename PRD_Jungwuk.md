@@ -7,7 +7,7 @@
 
 ## 1. Executive Summary
 
-Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는 친구 단위로 남기고, 같은 시간대에 혼자 있는 사람을 발견해 밥, 산책, 카페, 통화 같은 가벼운 번개로 연결되는 모바일 웹 서비스다.
+Setlog는 혼자 사는 사람들이 익명 닉네임으로 매시간의 2~4초 짧은 일상 영상을 남기고, 같은 동네/생활권에 있는 사람을 발견해 밥, 산책, 퇴근 후 수다 같은 가벼운 번개방으로 연결되는 모바일 웹 서비스다.
 
 핵심 문장:
 
@@ -17,9 +17,9 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 
 1. 지금 나만 혼자인 게 아니라는 공개 신호를 본다.
 2. 밥 먹을 사람, 산책할 사람을 N시간 안에 가볍게 찾는다.
-3. 실제로 만나지 못해도 각자의 방에서 올린 로그를 AI로 "함께 있던 한 장면"으로 남긴다.
+3. 실제로 만나지 못해도 각자의 방에서 올린 짧은 영상 로그를 AI로 "함께 있던 한 장면"으로 남긴다.
 
-이 서비스는 원본 Setlog 앱의 "친구들과 시시콜콜한 일상을 나누는 시간대별 기록" 경험에서 출발하되, 1인 가구의 외로움 문제에 맞춰 공개 피드, 번개, 친구 채팅, 공유 사진첩, AI 단체 사진 생성으로 확장한다.
+이 서비스는 원본 Setlog 앱의 "친구들과 시시콜콜한 일상을 나누는 시간대별 기록" 경험에서 출발하되, 1인 가구의 외로움 문제에 맞춰 익명 동네 피드, 번개방 카드, 친구 채팅, 공유 사진첩, AI 단체 사진 생성으로 확장한다. 동네 기반 기능은 해커톤 MVP에서 실제 위치 매칭이 아니라 UI와 seed 데이터로만 제공한다.
 
 ## 2. Problem & Insight
 
@@ -39,7 +39,7 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 
 따라서 MVP는 다음 질문에 답해야 한다.
 
-- 지금 주변에 나처럼 혼밥하는 사람이 있는가?
+- 지금 같은 동네/생활권에 나처럼 혼밥하는 사람이 있는가?
 - 이 사람은 오늘 어떤 시간을 보내고 있는가?
 - 지금 바로 같이 할 수 있는 작은 행동이 있는가?
 - 직접 만나지 못해도 오늘 같이 있었다는 기억을 만들 수 있는가?
@@ -71,13 +71,15 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 
 ### 4.1 One-liner
 
-혼자 사는 사람들이 매시간의 짧은 일상을 공개하고, 지금 같이 밥 먹거나 대화할 사람을 찾고, AI로 함께한 기억까지 남기는 모바일 웹 앱.
+혼자 사는 사람들이 익명 닉네임으로 2~4초 일상 영상을 남기고, 동네 기반 번개방에서 지금 같이 밥 먹거나 대화할 사람을 찾고, AI로 함께한 기억까지 남기는 모바일 웹 앱.
 
 ### 4.2 Differentiation
 
 - 일반 SNS와 다르게 멋진 순간이 아니라 "지금 뭐해?" 수준의 평범한 시간을 올린다.
 - 번개 앱과 다르게 약속 모집이 목적이 아니라 일상 로그에서 자연스럽게 연결된다.
 - 채팅 앱과 다르게 대화 시작점이 영상/사진 로그다.
+- 실명과 정확한 위치를 숨기고, 익명 닉네임과 동네 라벨만으로 느슨하게 연결한다.
+- "혼밥방", "퇴근 후 수다방", "동네 산책방" 같은 방 카드 템플릿으로 들어가기 전 분위기를 이해시킨다.
 - AI 사진 생성은 장식 기능이 아니라, 혼자 있던 여러 장면을 "같이 있던 기억"으로 바꾸는 정서적 보상이다.
 
 ### 4.3 North Star Metric
@@ -87,7 +89,7 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 해커톤 MVP에서는 실제 지표 대신 아래 데모 지표를 성공 기준으로 둔다.
 
 - 30초 안에 공개 피드에서 "나와 같은 시간대의 사람"을 발견한다.
-- 60초 안에 밥 번개 생성 또는 참여가 가능하다.
+- 60초 안에 혼밥방 생성 또는 참여가 가능하다.
 - 90초 안에 친구와의 AI 단체 사진 생성 결과를 볼 수 있다.
 
 ## 5. MVP Scope
@@ -96,38 +98,54 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 
 - 모바일 웹 UI.
 - PC 접속 시 모바일 프레임 고정 표시.
+- 익명 닉네임 기반 데모 로그인. 실명은 받지 않는다.
 - 공개 시간대별 Setlog 피드.
+- 동네 기반 Setlog UI. 실제 GPS/거리 계산은 구현하지 않고 동네 라벨과 seed 데이터로만 보여준다.
 - 필터: 전체, 친구, 동성, 주변, 밥 번개.
-- Setlog 업로드: 이미지 또는 짧은 영상.
+- Setlog 업로드: 2~4초 짧은 영상 로그. AI 생성 입력은 영상의 썸네일/대표 프레임을 사용한다.
 - Gemini API 기반 유해 이미지/영상 검사 wrapper.
 - N시간 후 만료되는 번개 생성 및 참여.
+- 방 카드/템플릿: 혼밥방, 퇴근 후 수다방, 동네 산책방.
 - 친구 추가.
 - 친구 필터 피드 전환.
 - 친구 채팅.
 - 친구/그룹 사진첩.
-- 여러 사용자의 Setlog를 하나의 AI 단체 사진으로 생성.
+- 친구 또는 그룹 단위 Setlog 영상을 하나의 장소 이미지로 합성한 AI 단체 사진 생성.
 - OpenAI `gpt-image-2` 기반 이미지 생성/편집 wrapper.
 - API 키가 없을 때 mock 결과로 데모 가능.
 
 ### 5.2 Should Have
 
-- Socket.IO 기반 실시간 번개/채팅 업데이트.
+- WebSocket 또는 polling 기반 번개/채팅 업데이트.
 - 업로드 처리 상태: 검사 중, 공개됨, 차단됨.
 - 생성형 AI 처리 상태: 생성 중, 완료, 실패.
-- 신고/차단 버튼.
+- 신고 버튼 UI. 실제 신고 처리 backend/admin은 구현하지 않는다.
+- Gemini 자동 차단 결과 표시.
 - 데모 seed 데이터.
 
 ### 5.3 Won't Have in MVP
 
 - 실제 앱스토어 배포.
-- 실제 GPS 기반 정밀 위치 매칭.
 - 결제.
 - 전화번호 인증.
 - 장기 그룹 운영 기능.
 - 고도화 추천 알고리즘.
 - 운영자 어드민.
 - 푸시 알림.
-- 실제 영상 편집/합성. AI 합성은 이미지 기반으로만 처리.
+- 영상통화.
+- 실제 GPS 기반 정밀 위치/동네 매칭. 동네 기능은 UI/seed 데이터로만 제공한다.
+- 실제 신고 처리 workflow. 신고는 데모용 UI만 제공한다.
+- 실제 영상 편집/영상 합성. AI 합성은 영상 썸네일/대표 프레임을 활용한 이미지 기반으로만 처리.
+
+### 5.4 UI-Only Demo Shortcuts
+
+구현 시간을 줄이기 위해 아래 기능은 화면과 상태만 제공하고 실제 backend 기능은 만들지 않는다.
+
+- 사용자 신고: 신고 버튼, 신고 완료 toast/modal만 제공.
+- 동네 기반 매칭: 동네 선택 chip, 주변 필터, 동네 배지만 제공. 실제 좌표/거리 계산 없음.
+- 방 카드 템플릿 커스터마이징: 제목/태그/썸네일 분위기 선택 UI만 제공. 저장된 추천 알고리즘 없음.
+- 실시간성: WebSocket이 늦어지면 polling 또는 local optimistic UI로 대체 가능.
+- 영상 길이 검사: 실제 metadata 파싱이 어려우면 업로드 UI에서 2~4초 안내와 seed duration 값으로 대체 가능.
 
 ## 6. Core User Flows
 
@@ -135,9 +153,11 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 
 1. 사용자가 웹 앱에 접속한다.
 2. PC라도 모바일 앱 프레임으로 중앙 표시된다.
-3. 첫 화면은 현재 시간대 공개 Setlog 피드다.
-4. 사용자는 전체/친구/동성/주변/밥 번개 필터를 탭으로 전환한다.
-5. 각 Setlog 카드에는 사용자, 시간, 동네, 상태, 짧은 캡션, 친구 추가 버튼이 있다.
+3. 사용자는 실명 없이 익명 닉네임 데모 계정으로 진입한다.
+4. 첫 화면은 현재 시간대 공개 Setlog 피드다.
+5. 사용자는 전체/친구/동성/주변/밥 번개 필터를 탭으로 전환한다.
+6. 주변 필터는 실제 위치가 아니라 동네 라벨 기반 UI로만 동작한다.
+7. 각 Setlog 카드에는 익명 닉네임, 시간, 동네, 상태, 짧은 캡션, 친구 추가 버튼이 있다.
 
 성공 기준:
 
@@ -147,7 +167,7 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 ### 6.2 Setlog Upload
 
 1. 하단 탭 중앙의 만들기 버튼을 누른다.
-2. 이미지 또는 짧은 영상을 선택한다.
+2. 2~4초 짧은 영상을 선택한다. 데모 seed는 대표 프레임/썸네일로 대체 가능하다.
 3. 한 줄 상태를 입력한다. 예: "혼밥 중", "편의점 다녀오는 길", "산책 갈 사람?"
 4. 공개 범위를 선택한다: 공개, 친구만.
 5. 업로드하면 Gemini 검사가 실행된다.
@@ -160,16 +180,17 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 
 ### 6.3 Flash Meet
 
-1. 사용자가 번개 탭 또는 피드 상단에서 번개 만들기를 누른다.
-2. 타입을 고른다: 밥, 카페, 산책, 통화.
+1. 사용자가 번개 탭 또는 피드 상단에서 방 만들기를 누른다.
+2. 방 카드 템플릿을 고른다: 혼밥방, 퇴근 후 수다방, 동네 산책방.
 3. 만료 시간을 고른다: 1시간, 2시간, 3시간.
-4. 동네와 한 줄 메시지를 입력한다.
-5. 번개가 공개되고 피드 상단에 노출된다.
-6. 다른 사용자가 참여를 누르면 1:1 채팅방이 열린다.
+4. 동네 라벨과 한 줄 메시지를 입력한다.
+5. 번개방 카드가 공개되고 피드 상단에 노출된다.
+6. 다른 사용자가 참여를 누르면 방 또는 1:1 채팅방이 열린다.
+7. 영상통화는 제공하지 않는다. 퇴근 후 수다방은 텍스트 채팅과 Setlog 공유만 제공한다.
 
 성공 기준:
 
-- 번개는 "모집 글"이 아니라 "지금 같이 할 사람"의 느낌이어야 한다.
+- 번개방은 "모집 글"이 아니라 "지금 같이 있을 사람"의 느낌이어야 한다.
 - 만료 시간이 명확히 보인다.
 
 ### 6.4 Friend & Chat
@@ -186,13 +207,14 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 
 ### 6.5 AI Group Memory Photo
 
-1. 사진첩에서 친구 또는 그룹의 Setlog 이미지를 여러 개 선택한다.
-2. 기준 장소가 될 Setlog를 하나 고른다.
-3. "같이 있었던 사진 만들기"를 누른다.
-4. 서버는 입력 이미지를 Gemini로 검사한다.
-5. 통과하면 OpenAI `gpt-image-2`로 기준 장소에 인물들을 자연스럽게 합성한 이미지를 생성한다.
-6. 생성 결과를 Gemini로 다시 검사한다.
-7. 통과한 이미지만 사진첩에 저장된다.
+1. 사진첩에서 친구 또는 그룹의 Setlog 영상 여러 개를 선택한다.
+2. 각 영상의 대표 프레임/썸네일을 AI 입력 이미지로 사용한다.
+3. 기준 장소가 될 Setlog를 하나 고른다.
+4. "같이 있었던 사진 만들기"를 누른다.
+5. 서버는 입력 이미지를 Gemini로 검사한다.
+6. 통과하면 OpenAI `gpt-image-2`로 기준 장소에 인물들을 자연스럽게 합성한 이미지를 생성한다.
+7. 생성 결과를 Gemini로 다시 검사한다.
+8. 통과한 이미지만 사진첩에 저장된다.
 
 성공 기준:
 
@@ -224,25 +246,36 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 
 ### 7.3 Feed UI
 
-- 상단: 현재 시간대, 필터 chip, 프로필/알림.
+- 상단: 현재 시간대, 익명 닉네임, 동네 라벨, 필터 chip, 프로필/알림.
 - 중단: 번개 live strip.
 - 본문: 시간대별 Setlog 카드.
 - 카드 구성:
   - 미디어 썸네일.
   - 시간.
-  - 사용자 이름.
+  - 익명 닉네임.
   - 동네.
   - 상태 캡션.
   - 친구 추가 또는 채팅 버튼.
+  - 신고 버튼. MVP에서는 UI만 제공하고 실제 처리 로직은 없다.
 
-### 7.4 Interaction
+### 7.4 Room Card UI
+
+- 방 카드는 번개를 더 직관적으로 보여주는 템플릿 UI다.
+- MVP 템플릿:
+  - 혼밥방: "지금 밥 먹는 사람들", 식사/동네/만료 시간 강조.
+  - 퇴근 후 수다방: "퇴근하고 잠깐 떠들 사람", 텍스트 채팅 중심. 영상통화 없음.
+  - 동네 산책방: "가볍게 걷거나 동네 공원 갈 사람", 생활권 라벨 강조.
+- 방 카드에는 방 제목, 익명 호스트 닉네임, 동네 라벨, 참여자 수, 만료 시간, 대표 Setlog 썸네일을 표시한다.
+- 템플릿 커스터마이징은 데모에서 UI만 제공한다. 저장/추천 알고리즘은 구현하지 않는다.
+
+### 7.5 Interaction
 
 - 모든 주요 터치 영역은 최소 44px.
 - 업로드, 번개 생성, AI 사진 생성은 bottom sheet 또는 full-screen modal.
 - 텍스트는 버튼 내부에서 줄바꿈/overflow가 발생하지 않아야 한다.
 - 모바일 한 손 사용을 위해 주요 액션은 하단 근처에 배치한다.
 
-### 7.5 Visual Tone
+### 7.6 Visual Tone
 
 - 운영 도구처럼 차갑지 않고, SNS처럼 과시적이지 않은 일상적 톤.
 - 과한 히어로/마케팅 레이아웃 금지.
@@ -257,6 +290,7 @@ Setlog는 혼자 사는 사람들이 매시간의 짧은 일상을 공개 또는
 MVP는 데모 로그인만 제공한다.
 
 - 사용자는 seed user 중 하나를 선택한다.
+- 사용자는 실명 대신 익명 닉네임으로만 표시된다. 예: "성수밥친구", "퇴근러42".
 - 서버는 demo session 또는 local token을 반환한다.
 - 실제 인증은 후순위다.
 
@@ -268,13 +302,14 @@ Setlog는 사용자의 시간대별 일상 미디어다.
 
 - id
 - userId
-- mediaType: image | video
+- mediaType: video
 - mediaUrl
 - thumbnailUrl
 - caption
 - visibility: public | friends
 - cityLabel
 - gender
+- durationSeconds
 - createdAt
 - hourSlot
 - moderationStatus: pending | approved | blocked
@@ -284,7 +319,9 @@ Setlog는 사용자의 시간대별 일상 미디어다.
 - 공개 피드에는 `visibility=public` 및 `moderationStatus=approved`만 노출.
 - 친구 피드에는 친구의 public/friends Setlog 중 승인된 것만 노출.
 - 시간대별 정렬은 최신 시간대 우선.
-- 영상 업로드는 MVP에서 30초 이하로 제한한다.
+- 영상 업로드는 MVP에서 2~4초로 제한한다.
+- 동네 기반 노출은 `cityLabel`만 사용하며 GPS나 실제 거리 계산은 하지 않는다.
+- AI 단체 사진 생성에는 영상 원본이 아니라 `thumbnailUrl` 또는 대표 프레임을 사용한다.
 
 ### 8.3 Filters
 
@@ -294,7 +331,7 @@ Setlog는 사용자의 시간대별 일상 미디어다.
 - 친구: 친구의 승인된 Setlog.
 - 동성: 현재 사용자와 gender가 같은 공개 Setlog.
 - 주변: 현재 사용자와 cityLabel이 같은 공개 Setlog.
-- 밥 번개: 활성 상태의 meal flash meet 및 관련 Setlog.
+- 밥 번개: 활성 상태의 `meal_room` 번개방 및 관련 Setlog.
 
 MVP에서 주변은 실제 좌표가 아니라 동네 라벨 기반이다.
 
@@ -306,7 +343,7 @@ Flash Meet은 N시간 후 자동 만료되는 가벼운 모집이다.
 
 - id
 - creatorId
-- type: meal | cafe | walk | call
+- template: meal_room | after_work_chat_room | neighborhood_walk_room
 - title
 - message
 - cityLabel
@@ -320,6 +357,8 @@ Flash Meet은 N시간 후 자동 만료되는 가벼운 모집이다.
 - 만료된 번개는 참여 불가.
 - 참여 시 creator와 participant의 chat room을 생성하거나 재사용.
 - 피드 상단에는 active meet만 표시.
+- 영상통화는 제공하지 않는다.
+- 방 카드 템플릿 수정 UI는 제공하되, 템플릿 추천/저장 고도화는 MVP에서 구현하지 않는다.
 
 ### 8.5 Friend
 
@@ -329,7 +368,7 @@ MVP 친구 관계는 단방향 follow가 아니라 양방향 친구로 단순화
 
 - 친구 추가 버튼을 누르면 즉시 친구 상태가 된다.
 - 친구 상태가 되면 친구 피드와 채팅이 가능하다.
-- 차단한 사용자는 모든 피드와 채팅에서 제외한다.
+- 사용자 신고는 UI-only이며, 실제 사용자 차단/제외 로직은 MVP에서 구현하지 않는다.
 
 ### 8.6 Chat
 
@@ -344,8 +383,8 @@ MVP는 친구 또는 번개 참여자 간 1:1 채팅을 우선한다.
 
 규칙:
 
-- Socket.IO로 새 메시지를 실시간 반영한다.
-- REST fallback도 제공한다.
+- FastAPI WebSocket 또는 REST polling으로 새 메시지를 반영한다.
+- MVP에서는 polling만 구현해도 통과로 본다.
 - 메시지는 최신순 room list에서 확인 가능하다.
 
 ### 8.7 Album
@@ -355,16 +394,16 @@ MVP는 친구 또는 번개 참여자 간 1:1 채팅을 우선한다.
 규칙:
 
 - 친구별 사진첩과 그룹 사진첩 UI를 제공한다.
-- 사용자는 여러 Setlog 이미지를 선택할 수 있다.
-- 영상 Setlog는 MVP에서 썸네일만 AI 생성 입력으로 사용한다.
+- 사용자는 여러 Setlog 영상을 선택할 수 있다.
+- 영상 Setlog는 MVP에서 썸네일 또는 대표 프레임만 AI 생성 입력으로 사용한다.
 - AI 생성 결과는 album item으로 저장한다.
 
 ### 8.8 AI Group Photo
 
 입력:
 
-- baseSetlogId: 기준 장소 이미지.
-- participantSetlogIds: 합성할 사람들의 이미지.
+- baseSetlogId: 기준 장소가 될 Setlog 영상의 대표 프레임.
+- participantSetlogIds: 합성할 사람들의 Setlog 영상 대표 프레임 목록.
 - style: realistic.
 
 출력:
@@ -381,6 +420,7 @@ MVP는 친구 또는 번개 참여자 간 1:1 채팅을 우선한다.
 - 음식/식탁/방 분위기를 자연스럽게 유지한다.
 - 과도한 미화, 왜곡, 노출, 미성년자처럼 보이게 하는 변형을 하지 않는다.
 - 결과는 실사 사진처럼 자연스러워야 한다.
+- 영상통화나 실시간 화상 합성처럼 보이면 안 된다. 결과물은 하나의 정지 이미지다.
 
 ## 9. Safety, Privacy, and Moderation
 
@@ -395,6 +435,7 @@ MVP는 친구 또는 번개 참여자 간 1:1 채팅을 우선한다.
 5. AI 이미지 생성에 들어가는 입력 이미지를 다시 검사한다.
 6. `gpt-image-2` 생성 결과도 Gemini로 재검사한다.
 7. 통과한 결과만 사진첩에 저장한다.
+8. 사용자는 각 카드의 신고 버튼을 누를 수 있지만, MVP에서는 신고 접수 완료 UI만 표시하고 실제 backend 처리와 admin review는 구현하지 않는다.
 
 Gemini API는 안전 설정을 통해 harassment, hate speech, sexually explicit, dangerous content 등 카테고리별 필터링을 제공하며, 비디오 입력도 처리할 수 있다.
 
@@ -414,8 +455,10 @@ Gemini API는 안전 설정을 통해 harassment, hate speech, sexually explicit
 - 정밀 위치는 수집하지 않는다.
 - 동네는 사용자가 선택한 cityLabel만 사용한다.
 - 전화번호, 실명, 주소는 받지 않는다.
+- 화면에는 실명 대신 익명 닉네임만 표시한다.
 - 공개 범위 기본값은 public이지만, 업로드 시 friends로 바꿀 수 있다.
-- 차단/신고 버튼은 모든 사용자 카드에 제공한다.
+- Gemini 자동 차단은 실제 wrapper 또는 mock으로 구현한다.
+- 사용자 신고 버튼은 모든 사용자 카드에 제공하되 UI-only로 처리한다.
 
 ### 9.4 AI Consent Assumption
 
@@ -431,15 +474,16 @@ Frontend:
 - React
 - TypeScript
 - Tailwind CSS
-- Socket.IO client
+- Native WebSocket client 또는 REST polling
 
 Backend:
 
-- Node.js
-- Express
-- Socket.IO
-- Multer for upload
-- SQLite 또는 lowdb
+- Python
+- FastAPI
+- Pydantic
+- FastAPI WebSocket 또는 REST polling
+- `UploadFile` for upload
+- SQLite 또는 JSON file storage
 
 AI:
 
@@ -452,7 +496,7 @@ AI:
 
 ```text
 .
-├── PRD.md
+├── PRD_Jungwuk.md
 ├── README.md
 ├── package.json
 ├── .env.example
@@ -465,13 +509,14 @@ AI:
 │   │   ├── screens
 │   │   └── styles.css
 │   ├── server
-│   │   ├── index.ts
-│   │   ├── db.ts
-│   │   ├── seed.ts
+│   │   ├── main.py
+│   │   ├── db.py
+│   │   ├── seed.py
+│   │   ├── schemas.py
 │   │   ├── routes
 │   │   └── services
-│   │       ├── geminiModeration.ts
-│   │       └── openaiImage.ts
+│   │       ├── gemini_moderation.py
+│   │       └── openai_image.py
 │   └── shared
 │       └── api-types.ts
 └── uploads
@@ -481,7 +526,7 @@ AI:
 ### 10.3 Environment Variables
 
 ```text
-PORT=3001
+API_PORT=8000
 CLIENT_ORIGIN=http://localhost:5173
 OPENAI_API_KEY=
 GEMINI_API_KEY=
@@ -514,7 +559,7 @@ Response:
 
 #### Setlogs
 
-`GET /api/setlogs?filter=all|friends|sameGender|nearby|meal&userId=u_01`
+`GET /api/setlogs?filter=all|friends|sameGender|nearby|mealRoom&userId=u_01`
 
 Response:
 
@@ -524,11 +569,13 @@ Response:
     {
       "id": "s_01",
       "userId": "u_02",
-      "userName": "민서",
-      "mediaType": "image",
-      "mediaUrl": "/uploads/seed/meal-01.jpg",
+      "nickname": "성수밥친구",
+      "mediaType": "video",
+      "mediaUrl": "/uploads/seed/meal-01.mp4",
+      "thumbnailUrl": "/uploads/seed/meal-01.jpg",
       "caption": "오늘도 혼밥 중",
       "cityLabel": "성수",
+      "durationSeconds": 3,
       "hourSlot": "20:00",
       "createdAt": "2026-05-09T11:00:00.000Z",
       "isFriend": false
@@ -541,6 +588,7 @@ Response:
 
 - multipart/form-data.
 - fields: userId, caption, visibility, cityLabel, media.
+- validation: video duration should be 2~4 seconds. Demo seed may bypass with fixed duration metadata.
 - response: created Setlog with moderationStatus.
 
 #### Flash Meets
@@ -554,7 +602,8 @@ Request:
 ```json
 {
   "creatorId": "u_01",
-  "type": "meal",
+  "template": "meal_room",
+  "title": "혼밥방",
   "message": "성수에서 저녁 먹을 사람",
   "cityLabel": "성수",
   "expiresInHours": 2
@@ -599,7 +648,7 @@ Request:
 { "senderId": "u_01", "text": "오늘 밥 먹었어?" }
 ```
 
-Socket events:
+WebSocket or polling events:
 
 - `chat:join`
 - `chat:message`
@@ -633,75 +682,74 @@ Response:
 
 ## 11. Data Model
 
+Backend model examples use FastAPI/Pydantic style. Implementers should import `BaseModel` from `pydantic` and `Literal` from `typing`.
+
 ### User
 
-```ts
-type User = {
-  id: string;
-  name: string;
-  avatarUrl: string;
-  gender: "female" | "male" | "other";
-  cityLabel: string;
-  bio: string;
-};
+```python
+class User(BaseModel):
+    id: str
+    nickname: str
+    avatar_url: str
+    gender: Literal["female", "male", "other"]
+    city_label: str
+    bio: str
 ```
 
 ### Setlog
 
-```ts
-type Setlog = {
-  id: string;
-  userId: string;
-  mediaType: "image" | "video";
-  mediaUrl: string;
-  thumbnailUrl?: string;
-  caption: string;
-  visibility: "public" | "friends";
-  cityLabel: string;
-  hourSlot: string;
-  createdAt: string;
-  moderationStatus: "pending" | "approved" | "blocked";
-};
+```python
+class Setlog(BaseModel):
+    id: str
+    user_id: str
+    media_type: Literal["video"]
+    media_url: str
+    thumbnail_url: str | None = None
+    caption: str
+    visibility: Literal["public", "friends"]
+    city_label: str
+    duration_seconds: int
+    hour_slot: str
+    created_at: str
+    moderation_status: Literal["pending", "approved", "blocked"]
 ```
 
 ### FlashMeet
 
-```ts
-type FlashMeet = {
-  id: string;
-  creatorId: string;
-  type: "meal" | "cafe" | "walk" | "call";
-  message: string;
-  cityLabel: string;
-  expiresAt: string;
-  participantIds: string[];
-  status: "active" | "expired" | "closed";
-};
+```python
+class FlashMeet(BaseModel):
+    id: str
+    creator_id: str
+    template: Literal["meal_room", "after_work_chat_room", "neighborhood_walk_room"]
+    title: str
+    message: str
+    city_label: str
+    expires_at: str
+    participant_ids: list[str]
+    status: Literal["active", "expired", "closed"]
 ```
 
 ### ChatRoom
 
-```ts
-type ChatRoom = {
-  id: string;
-  memberIds: string[];
-  createdAt: string;
-  updatedAt: string;
-};
+```python
+class ChatRoom(BaseModel):
+    id: str
+    member_ids: list[str]
+    created_at: str
+    updated_at: str
 ```
 
 ### AlbumItem
 
-```ts
-type AlbumItem = {
-  id: string;
-  ownerUserId: string;
-  memberIds: string[];
-  sourceSetlogIds: string[];
-  imageUrl: string;
-  type: "setlog" | "ai_group_photo";
-  createdAt: string;
-};
+```python
+class AlbumItem(BaseModel):
+    id: str
+    owner_user_id: str
+    member_ids: list[str]
+    source_setlog_ids: list[str]
+    image_url: str
+    type: Literal["setlog_frame", "ai_group_photo"]
+    created_at: str
 ```
 
 ## 12. AI Implementation Notes
@@ -765,21 +813,21 @@ Local Environment A: Frontend owner
 Local Environment B: Backend owner
 
 - Owns `src/server/**` and `src/shared/**`.
-- Owns Express routes, DB, seed data, Socket.IO, AI wrappers.
+- Owns FastAPI routes, Pydantic models, DB/JSON storage, seed data, WebSocket or polling endpoints, AI wrappers.
 - Does not edit frontend screens.
 - Provides stable API responses matching `src/shared/api-types.ts`.
 
 Shared files:
 
-- `package.json`, `.env.example`, `README.md` are edited by one person only in the final integration window.
-- `PRD.md` is source of truth and should not be reformatted during implementation.
+- `package.json`, backend dependency file, `.env.example`, `README.md` are edited by one person only in the final integration window.
+- `PRD_Jungwuk.md` is source of truth and should not be reformatted during implementation.
 
 ### 13.2 Timeline
 
 0:00 - 0:15 Setup
 
 - Create Vite React app structure.
-- Create Express server structure.
+- Create FastAPI server structure.
 - Add shared types.
 - Add seed users/setlogs/flash meets.
 
@@ -791,7 +839,7 @@ Shared files:
 1:15 - 2:00 Social + Realtime
 
 - A: chat UI, album UI, AI generation UI.
-- B: chat APIs, Socket.IO, join flash meet flow.
+- B: chat APIs, FastAPI WebSocket or REST polling, join flash meet flow.
 
 2:00 - 2:35 AI + Safety
 
@@ -826,12 +874,14 @@ Shared files:
 - 첫 화면이 모바일 앱처럼 보인다.
 - PC 브라우저에서도 앱 폭이 430px 이하로 중앙 고정된다.
 - 공개 Setlog 피드가 보인다.
+- 화면에는 실명 없이 익명 닉네임만 보인다.
+- 주변/동네 기능은 동네 라벨 UI와 seed 데이터로 표시된다.
 - 전체/친구/동성/주변/밥 번개 필터가 동작한다.
-- Setlog 업로드 플로우가 있다.
-- 번개 생성과 참여가 가능하다.
+- 2~4초 Setlog 영상 업로드 플로우가 있다.
+- 혼밥방, 퇴근 후 수다방, 동네 산책방 카드 생성과 참여가 가능하다.
 - 친구 추가 후 친구 피드로 전환 가능하다.
 - 친구 채팅이 가능하다.
-- 사진첩에서 AI 단체 사진 생성 플로우가 가능하다.
+- 사진첩에서 친구/그룹 Setlog 영상 대표 프레임을 활용한 AI 단체 사진 생성 플로우가 가능하다.
 - API 키 없이도 mock 모드로 데모가 끝까지 이어진다.
 
 ### 14.2 Safety
@@ -839,14 +889,16 @@ Shared files:
 - 업로드 미디어에 moderationStatus가 존재한다.
 - 차단된 미디어는 공개 피드에 나오지 않는다.
 - AI 입력과 결과 모두 moderation step을 거친다.
-- 신고/차단 UI가 있다.
+- Gemini 자동 차단 flow가 있다.
+- 신고 UI가 있다. 실제 신고 처리 기능은 구현하지 않는다.
 - 실제 주소/전화번호/정밀 좌표를 요구하지 않는다.
 
 ### 14.3 Technical
 
-- `npm install` 후 `npm run dev` 또는 명시된 script로 실행 가능하다.
+- 프론트는 `npm install` 후 `npm run dev` 또는 명시된 script로 실행 가능하다.
+- 백엔드는 FastAPI 실행 명령, 예: `uvicorn src.server.main:app --reload`, 으로 실행 가능하다.
 - 프론트와 백엔드가 동시에 실행된다.
-- TypeScript build가 통과한다.
+- TypeScript build와 Python import/runtime check가 통과한다.
 - seed data로 데모가 가능하다.
 - README에 실행 방법과 env 설명이 있다.
 
@@ -855,24 +907,25 @@ Shared files:
 ### 15.1 90-Second Pitch
 
 1. "1인 가구의 외로움은 큰 이벤트가 아니라 매일 밥 먹는 순간에 옵니다."
-2. "Setlog는 지금 이 시간 혼자 있는 사람들의 짧은 일상을 보여줍니다."
-3. 공개 피드에서 혼밥 Setlog를 보여준다.
+2. "Setlog는 지금 이 시간 같은 동네에서 혼자 있는 사람들의 2~4초 일상 로그를 보여줍니다."
+3. 익명 닉네임과 동네 라벨이 붙은 혼밥 Setlog를 보여준다.
 4. 동성/주변/친구 필터를 전환한다.
-5. "저녁 먹을 사람" 번개를 생성한다.
-6. 다른 사용자가 참여하고 채팅방이 열린다.
-7. 서로 다른 방에서 밥 먹는 Setlog들을 선택한다.
+5. 혼밥방, 퇴근 후 수다방, 동네 산책방 카드 중 하나를 만든다.
+6. 다른 사용자가 참여하고 채팅방이 열린다. 영상통화는 제공하지 않는다.
+7. 서로 다른 방에서 밥 먹는 Setlog 영상 대표 프레임들을 선택한다.
 8. 기준 장소를 한 명의 자취방으로 고른다.
-9. AI가 모두가 한 식탁에 모인 사진을 만든다.
-10. "만나지 못한 날도 같이 있었던 기억으로 남깁니다."
+9. AI가 모두가 한 식탁에 모인 정지 이미지를 만든다.
+10. Gemini 자동 차단과 신고 UI를 보여준다.
+11. "만나지 못한 날도 같이 있었던 기억으로 남깁니다."
 
 ### 15.2 Judge-Facing Highlights
 
-- 문제 적합성: 혼밥, 산책, 통화 같은 실제 일상 문제.
-- 매일성: 매시간 짧은 로그와 만료 번개.
+- 문제 적합성: 혼밥, 산책, 퇴근 후 수다 같은 실제 일상 문제.
+- 매일성: 매시간 2~4초 짧은 로그와 만료 번개방.
 - 연결성: 공개 피드에서 친구/채팅으로 자연스럽게 전환.
-- AI 필수성: 각자 다른 공간을 하나의 기억으로 합성.
-- 안전성: Gemini 기반 업로드/결과 검사.
-- 구현성: 3시간 MVP에 맞춘 mock fallback과 분업 구조.
+- AI 필수성: 각자 다른 공간의 Setlog 프레임을 하나의 기억 이미지로 합성.
+- 안전성: Gemini 기반 자동 차단과 사용자 신고 UI.
+- 구현성: 3시간 MVP에 맞춘 UI-only 범위, mock fallback, 분업 구조.
 
 ## 16. Risks & Mitigations
 
