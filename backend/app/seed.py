@@ -9,12 +9,12 @@ from app.services.media import ensure_upload_dirs
 BASE_TIME = datetime(2026, 5, 9, 12, 0, tzinfo=timezone.utc)
 
 LEGACY_SEED_IDS = {
-    User: ["user-mina", "user-jun", "user-soo", "user-hana"],
+    User: ["user-mina", "user-jun", "user-soo", "user-hana", "u_05"],
     Setlog: ["setlog-meal-mina-001", "setlog-daily-jun-001", "setlog-friends-jun-001", "setlog-meal-soo-001", "setlog-blocked-001"],
-    Friendship: ["friend-user-mina-user-jun", "friend-user-jun-user-mina"],
+    Friendship: ["friend-user-mina-user-jun", "friend-user-jun-user-mina", "friend-u_01-u_05", "friend-u_05-u_01"],
     FlashMeet: ["flash-coffee-001", "flash-meal-001", "flash-expired-001"],
-    ChatRoom: ["chat-mina-jun"],
-    ChatMessage: ["msg-mina-jun-001", "msg-jun-mina-001"],
+    ChatRoom: ["chat-mina-jun", "c_03"],
+    ChatMessage: ["msg-mina-jun-001", "msg-jun-mina-001", "m_04"],
     AlbumItem: ["album-mina-group-001", "a_01"],
 }
 
@@ -55,7 +55,7 @@ def seed_database(session: Session) -> None:
         Setlog(id="s_01", user_id="u_02", media_type=MediaType.video, media_url="/uploads/seed/IMG_9563.mp4", thumbnail_url="/uploads/seed/IMG_9563.jpg", caption="집에서 토끼옷 입고 혼자 춤추는 중ㅋㅋ", category="chat", visibility="public", city_label="성수", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=60), moderation_status=ModerationStatus.approved, like_count=12),
         Setlog(id="s_02", user_id="u_04", media_type=MediaType.video, media_url="/uploads/seed/IMG_9183.mp4", thumbnail_url="/uploads/seed/IMG_9183.jpg", caption="모래언덕에서 ATV 타니까 속이 뻥 뚫린다", category="walk", visibility="public", city_label="성수", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=57), moderation_status=ModerationStatus.approved, like_count=8),
         Setlog(id="s_03", user_id="u_03", media_type=MediaType.video, media_url="/uploads/seed/IMG_8211.mp4", thumbnail_url="/uploads/seed/IMG_8211.jpg", caption="예쁜 칵테일 한 잔으로 오늘 마무리", category="chat", visibility="public", city_label="뚝섬", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=53), moderation_status=ModerationStatus.approved, like_count=5),
-        Setlog(id="s_04", user_id="u_01", media_type=MediaType.video, media_url="/uploads/seed/IMG_9255.mp4", thumbnail_url="/uploads/seed/IMG_9255.jpg", caption="빨간 등대 보면서 바람 쐬는 중", category="walk", visibility="friends", city_label="성수", hour_slot="19:00", created_at=BASE_TIME - timedelta(minutes=98), moderation_status=ModerationStatus.approved, like_count=9),
+        Setlog(id="s_04", user_id="u_04", media_type=MediaType.video, media_url="/uploads/seed/IMG_9255.mp4", thumbnail_url="/uploads/seed/IMG_9255.jpg", caption="빨간 등대 보면서 바람 쐬는 중", category="walk", visibility="friends", city_label="성수", hour_slot="19:00", created_at=BASE_TIME - timedelta(minutes=98), moderation_status=ModerationStatus.approved, like_count=9),
         Setlog(id="s_05", user_id="u_02", media_type=MediaType.video, media_url="/uploads/seed/IMG_4444.mp4", thumbnail_url="/uploads/seed/IMG_4444.jpg", caption="숯불에 고기 굽는 냄새 미쳤다... 같이 먹을 사람", category="meal", visibility="public", city_label="성수", hour_slot="20:00", created_at=BASE_TIME - timedelta(minutes=48), moderation_status=ModerationStatus.approved, like_count=18),
         Setlog(id="s_blocked_01", user_id="u_04", media_type=MediaType.image, media_url="/uploads/seed/IMG_8211.jpg", thumbnail_url="/uploads/seed/IMG_8211.jpg", caption="blocked seed content", category="chat", visibility="public", city_label="성수", hour_slot="17:00", created_at=BASE_TIME - timedelta(hours=5), moderation_status=ModerationStatus.blocked),
     ]

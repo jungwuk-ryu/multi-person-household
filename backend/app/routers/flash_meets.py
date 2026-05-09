@@ -15,27 +15,27 @@ FLASH_META = {
     "meal": {
         "template": "meal_room",
         "title": "혼밥방",
-        "thumbnail_url": "/uploads/seed/room-meal.webp",
+        "thumbnail_url": "/uploads/seed/flash-meal.png",
     },
     "cafe": {
         "template": "after_work_chat_room",
         "title": "퇴근 후 수다방",
-        "thumbnail_url": "/uploads/seed/room-chat.webp",
+        "thumbnail_url": "/uploads/seed/flash-chat.png",
     },
     "walk": {
         "template": "neighborhood_walk_room",
         "title": "동네 산책방",
-        "thumbnail_url": "/uploads/seed/room-walk.webp",
+        "thumbnail_url": "/uploads/seed/flash-walk.png",
     },
     "call": {
         "template": "after_work_chat_room",
         "title": "퇴근 후 수다방",
-        "thumbnail_url": "/uploads/seed/room-chat.webp",
+        "thumbnail_url": "/uploads/seed/flash-chat.png",
     },
     "other": {
         "template": "other_room",
         "title": "기타",
-        "thumbnail_url": "/uploads/seed/room-chat.webp",
+        "thumbnail_url": "/uploads/seed/flash-other.png",
     },
 }
 
@@ -68,7 +68,15 @@ def list_flash_meets(userId: str = "user-mina", session: Session = Depends(get_s
     get_user_or_404(session, userId)
     now = datetime.now(timezone.utc)
     meets = session.exec(select(FlashMeet).where(FlashMeet.status == FlashMeetStatus.active, FlashMeet.expires_at > now)).all()
-    return {"items": [flash_out(session, meet) for meet in meets]}
+    deduped: list[FlashMeet] = []
+    seen: set[tuple[str, str, str]] = set()
+    for meet in meets:
+        key = (meet.type.value, meet.city_label, meet.message)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(meet)
+    return {"items": [flash_out(session, meet) for meet in deduped]}
 
 
 @router.post("", response_model=FlashMeetCreateResponse)

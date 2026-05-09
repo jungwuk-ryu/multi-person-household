@@ -74,6 +74,7 @@ async def create_setlog(
     visibility: Visibility = Form(...),
     cityLabel: str = Form(...),
     media: UploadFile = File(...),
+    thumbnail: UploadFile | None = File(None),
     session: Session = Depends(get_session),
 ):
     user = get_user_or_404(session, userId)
@@ -94,7 +95,13 @@ async def create_setlog(
     if moderation == ModerationStatus.blocked:
         _reject_blocked_setlog(media_path)
     media_type = MediaType.video if media_content_type.startswith("video/") else MediaType.image
-    setlog = Setlog(id=setlog_id, user_id=user.id, media_type=media_type, media_url=media_url, thumbnail_url=media_url, caption=caption, category=category, visibility=visibility, city_label=cityLabel, hour_slot=_hour_slot(), moderation_status=moderation)
+    thumbnail_url = media_url
+    if thumbnail is not None and normalize_media_type(thumbnail.content_type).startswith("image/"):
+        try:
+            thumbnail_url = await save_upload(thumbnail, f"{setlog_id}-thumb")
+        except HTTPException:
+            thumbnail_url = media_url
+    setlog = Setlog(id=setlog_id, user_id=user.id, media_type=media_type, media_url=media_url, thumbnail_url=thumbnail_url, caption=caption, category=category, visibility=visibility, city_label=cityLabel, hour_slot=_hour_slot(), moderation_status=moderation)
     session.add(setlog)
     session.commit()
     session.refresh(setlog)

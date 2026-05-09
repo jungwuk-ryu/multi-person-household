@@ -1,4 +1,6 @@
+import base64
 import os
+from types import SimpleNamespace
 
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["MOCK_AI"] = "true"
@@ -6,11 +8,13 @@ os.environ["MOCK_AI"] = "true"
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from app.config import get_settings
 from app.database import engine
 from app.database import create_db_and_tables
 from app.main import app
 from app.models import Setlog
-from app.services.image_generation import ImageGenerationService
+from app.services.image_generation import DEMO_GENERATED_ASSET_URL, ImageGenerationService
+from app.services.media import media_path_from_url
 from app.seed import seed_database
 
 
@@ -185,7 +189,7 @@ def test_chat_message_creation():
 
 
 def test_mock_ai_group_photo_generation():
-    assert ImageGenerationService().generate_group_photo("Friendly neighborhood dinner memory", []) == "/uploads/seed/generated-demo.jpg"
+    assert ImageGenerationService().generate_group_photo("Friendly neighborhood dinner memory", []) == DEMO_GENERATED_ASSET_URL
 
 
 def test_group_photo_uses_base_setlog_id_contract():
@@ -200,7 +204,7 @@ def test_group_photo_uses_base_setlog_id_contract():
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["generatedImageUrl"] == "/uploads/seed/generated-demo.jpg"
+    assert body["generatedImageUrl"] == DEMO_GENERATED_ASSET_URL
     assert body["baseSetlogId"] == "s_04"
     assert body["sourceSetlogIds"] == ["s_01", "s_04"]
 
@@ -218,7 +222,7 @@ def test_group_photo_preview_can_skip_album_persistence():
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["generatedImageUrl"] == "/uploads/seed/generated-demo.jpg"
+    assert body["generatedImageUrl"] == DEMO_GENERATED_ASSET_URL
     assert body["albumItem"] is None
 
 
@@ -227,7 +231,7 @@ def test_mock_ai_memo_photo_generation():
         "/api/ai/memo-photo",
         json={
             "userId": "u_01",
-            "sourceImageUrl": "/uploads/seed/generated-demo.jpg",
+            "sourceImageUrl": "/uploads/seed/meal-01.jpg",
             "sourceSetlogIds": ["s_01", "s_04"],
             "baseSetlogId": "s_04",
             "prompt": "흰색 손글씨 메모를 추가해줘",
@@ -235,8 +239,53 @@ def test_mock_ai_memo_photo_generation():
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["generatedImageUrl"] == "/uploads/seed/generated-demo.jpg"
-    assert body["albumItem"]["imageUrl"] == "/uploads/seed/generated-demo.jpg"
+    assert body["generatedImageUrl"] == DEMO_GENERATED_ASSET_URL
+    assert body["generatedImageUrl"] != "/uploads/seed/meal-01.jpg"
+    assert body["albumItem"]["imageUrl"] == DEMO_GENERATED_ASSET_URL
+
+
+def test_real_memo_photo_uses_openai_sdk_and_saves_generated_output(monkeypatch, tmp_path):
+    import openai
+
+    class FakeImages:
+        def __init__(self):
+            self.calls = []
+
+        def edit(self, **kwargs):
+            self.calls.append(kwargs)
+            return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(b"memo-image").decode("ascii"))])
+
+    fake_images = FakeImages()
+
+    class FakeOpenAI:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.images = fake_images
+
+    monkeypatch.setattr(openai, "OpenAI", FakeOpenAI)
+    monkeypatch.setenv("MOCK_AI", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_IMAGE_PARALLEL_REQUESTS", "1")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    try:
+        seed_source = tmp_path / "seed" / "meal-01.jpg"
+        seed_source.parent.mkdir(parents=True, exist_ok=True)
+        seed_source.write_bytes(b"seed-image")
+        generated_url = ImageGenerationService().generate_memo_photo("/uploads/seed/meal-01.jpg", "메모 사진으로 바꿔줘")
+        generated_path = media_path_from_url(generated_url)
+
+        assert generated_url.startswith("/uploads/generated/group-photo-")
+        assert generated_path is not None
+        assert generated_path.exists()
+        assert generated_path.read_bytes() == b"memo-image"
+        assert len(fake_images.calls) == 1
+        assert fake_images.calls[0]["model"] == "gpt-image-2"
+        assert fake_images.calls[0]["size"] == "1024x1024"
+        assert fake_images.calls[0]["n"] == 1
+    finally:
+        get_settings.cache_clear()
 
 
 def test_startup_seeding_is_idempotent():

@@ -27,9 +27,6 @@ import dogProfile from "./assets/profiles/dog.webp";
 import seoulLandscapeProfile from "./assets/profiles/seoul-landscape.webp";
 import selfieWomanProfile from "./assets/profiles/selfie-woman.webp";
 import selfieWomanAltProfile from "./assets/profiles/selfie-woman-alt.webp";
-import roomChatThumbnail from "./assets/rooms/room-chat.webp";
-import roomMealThumbnail from "./assets/rooms/room-meal.webp";
-import roomWalkThumbnail from "./assets/rooms/room-walk.webp";
 
 type Tab = "feed" | "rooms" | "capture" | "connections" | "more";
 type Filter = "all" | "friends" | "sameGender" | "oppositeGender" | "nearby";
@@ -324,7 +321,7 @@ const initialSetlogs: Setlog[] = [
   },
   {
     id: "s_04",
-    userId: "u_01",
+    userId: "u_04",
     mediaType: "video",
     thumbnailUrl: mockVideos.dinnerB.poster,
     mediaUrl: mockVideos.dinnerB.video,
@@ -371,7 +368,7 @@ const initialRooms: Room[] = [
     expiresInMinutes: 42,
     participantIds: ["u_04", "u_02", "u_01"],
     status: "active",
-    thumbnailUrl: roomMealThumbnail
+    thumbnailUrl: "/uploads/seed/flash-meal.png"
   },
   {
     id: "r_02",
@@ -383,7 +380,7 @@ const initialRooms: Room[] = [
     expiresInMinutes: 74,
     participantIds: ["u_02", "u_04"],
     status: "active",
-    thumbnailUrl: roomChatThumbnail
+    thumbnailUrl: "/uploads/seed/flash-chat.png"
   },
   {
     id: "r_03",
@@ -395,7 +392,7 @@ const initialRooms: Room[] = [
     expiresInMinutes: 31,
     participantIds: ["u_03", "u_01"],
     status: "active",
-    thumbnailUrl: roomWalkThumbnail
+    thumbnailUrl: "/uploads/seed/flash-walk.png"
   },
   {
     id: "r_04",
@@ -407,7 +404,7 @@ const initialRooms: Room[] = [
     expiresInMinutes: 58,
     participantIds: ["u_02"],
     status: "active",
-    thumbnailUrl: roomChatThumbnail
+    thumbnailUrl: "/uploads/seed/flash-other.png"
   }
 ];
 
@@ -643,9 +640,15 @@ function App() {
       if (setlog.uploadState) return true;
       return list.findIndex((item) => item.userId === setlog.userId && !item.uploadState) === index;
     });
-    if (feedHourOffset === 0) return uniqueItems;
-    const shift = feedHourOffset > 0 ? 1 : Math.max(0, uniqueItems.length - 1);
-    return [...uniqueItems.slice(shift), ...uniqueItems.slice(0, shift)];
+    const visibleItems = [...uniqueItems].sort((a, b) => {
+      const aMine = a.userId === currentUser.id ? 1 : 0;
+      const bMine = b.userId === currentUser.id ? 1 : 0;
+      if (aMine !== bMine) return bMine - aMine;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    if (feedHourOffset === 0) return visibleItems;
+    const shift = feedHourOffset > 0 ? 1 : Math.max(0, visibleItems.length - 1);
+    return [...visibleItems.slice(shift), ...visibleItems.slice(0, shift)];
   }, [activeFilter, activeTopic, feedHourOffset, friendIds, setlogs]);
 
   const selectedSetlogs = useMemo(
@@ -771,8 +774,8 @@ function App() {
       topic,
       durationSeconds: SETLOG_DURATION_SECONDS,
       cityLabel: currentUser.cityLabel,
-      thumbnailUrl: capture.thumbnailUrl,
       media: capture.videoBlob,
+      thumbnail: await dataUrlToBlob(capture.thumbnailUrl),
       moderationProvider: "gemini"
     });
 
@@ -1380,7 +1383,7 @@ function ConnectionsScreen({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAlbumOpen, setIsAlbumOpen] = useState(false);
   const [activeSetlogIndex, setActiveSetlogIndex] = useState(0);
-  const activeTarget =
+  const activeTarget: ConnectionTarget =
     selectedTarget.type === "friend" && friendUsers.some((user) => user.id === selectedTarget.id)
       ? selectedTarget
       : selectedTarget.type === "group" && rooms.some((room) => room.id === selectedTarget.id)
@@ -1406,6 +1409,11 @@ function ConnectionsScreen({
   const targetRoomId = selectedFriend ? friendChatRoomId(selectedFriend.id) : selectedRoom?.id ?? firstGroupId;
   const targetMessages = messages.filter((message) => message.roomId === targetRoomId);
   const chatMessages = targetMessages;
+  const targetSetlogIds = useMemo(() => new Set(targetSetlogs.map((setlog) => setlog.id)), [targetSetlogs]);
+  const targetAlbumItems = useMemo(
+    () => albumItems.filter((item) => item.sourceSetlogIds.some((setlogId) => targetSetlogIds.has(setlogId))),
+    [albumItems, targetSetlogIds]
+  );
 
   const switchMode = (nextMode: ConnectionMode) => {
     setMode(nextMode);
@@ -1572,14 +1580,52 @@ function ConnectionsScreen({
           onClose={() => setIsChatOpen(false)}
         />
       )}
-      {isAlbumOpen && <AlbumSheet albumItems={albumItems} onClose={() => setIsAlbumOpen(false)} />}
+      {isAlbumOpen && (
+        <AlbumSheet
+          albumItems={targetAlbumItems}
+          targetName={targetTitle}
+          targetType={activeTarget.type}
+          targetSetlogCount={targetSetlogs.length}
+          onClose={() => setIsAlbumOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
-function AlbumSheet({ albumItems, onClose }: { albumItems: AlbumItem[]; onClose: () => void }) {
+function AlbumSheet({
+  albumItems,
+  targetName,
+  targetType,
+  targetSetlogCount,
+  onClose
+}: {
+  albumItems: AlbumItem[];
+  targetName: string;
+  targetType: ConnectionTarget["type"];
+  targetSetlogCount: number;
+  onClose: () => void;
+}) {
+  const title = targetType === "friend" ? `${targetName} 앨범` : `${targetName} 그룹 앨범`;
+  const emptyTitle =
+    targetType === "friend"
+      ? targetSetlogCount
+        ? `${targetName}와 연결된 앨범이 없어요`
+        : `${targetName}의 로그가 아직 없어요`
+      : targetSetlogCount
+        ? `${targetName} 그룹 앨범이 아직 없어요`
+        : `${targetName} 그룹 로그가 아직 없어요`;
+  const emptyMessage =
+    targetType === "friend"
+      ? targetSetlogCount
+        ? `${targetName}의 로그로 밋업 나우!를 만들면 여기에 저장돼요.`
+        : `${targetName}의 로그가 올라오면 여기서 함께 만든 장면을 볼 수 있어요.`
+      : targetSetlogCount
+        ? "이 그룹 로그를 연결해 밋업 나우!를 만들면 여기에 저장돼요."
+        : "그룹에 올라온 로그가 생기면 여기서 함께 만든 장면을 볼 수 있어요.";
+
   return (
-    <BottomSheet title="앨범" onClose={onClose}>
+    <BottomSheet title={title} onClose={onClose}>
       {albumItems.length ? (
         <div className="album-sheet-grid">
           {albumItems.map((item) => (
@@ -1602,8 +1648,8 @@ function AlbumSheet({ albumItems, onClose }: { albumItems: AlbumItem[]; onClose:
           <span>
             <ImagePlus size={28} />
           </span>
-          <h3>아직 앨범이 없어요</h3>
-          <p>셋로그에서 밋업 나우!를 만들면 여기에 저장돼요.</p>
+          <h3>{emptyTitle}</h3>
+          <p>{emptyMessage}</p>
         </section>
       )}
     </BottomSheet>
@@ -2730,7 +2776,11 @@ function ProfileSheet({
 
       {latest && (
         <article className="profile-latest-log">
-          <img src={latest.thumbnailUrl} alt={`${user.nickname} 최근 로그`} />
+          {latest.mediaUrl && latest.mediaType === "video" ? (
+            <video src={latest.mediaUrl} poster={latest.thumbnailUrl} autoPlay muted loop playsInline />
+          ) : (
+            <img src={latest.thumbnailUrl} alt={`${user.nickname} 최근 로그`} />
+          )}
           <div className="min-w-0">
             <strong>최근 로그</strong>
             <p>{latest.caption}</p>
@@ -3063,9 +3113,10 @@ function templateTitle(template: RoomTemplate) {
 }
 
 function thumbnailForRoomTemplate(template: RoomTemplate) {
-  if (template === "neighborhood_walk_room") return media.walk;
-  if (template === "after_work_chat_room" || template === "other_room") return media.cafe;
-  return media.dinnerB;
+  if (template === "neighborhood_walk_room") return "/uploads/seed/flash-walk.png";
+  if (template === "after_work_chat_room") return "/uploads/seed/flash-chat.png";
+  if (template === "other_room") return "/uploads/seed/flash-other.png";
+  return "/uploads/seed/flash-meal.png";
 }
 
 function getUser(userId: string) {

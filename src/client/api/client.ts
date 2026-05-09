@@ -82,6 +82,7 @@ export type CreateSetlogRequest = {
   thumbnailUrl?: string;
   mediaUrl?: string;
   media?: Blob | File;
+  thumbnail?: Blob | File;
 };
 
 export type RoomDto = {
@@ -339,6 +340,32 @@ const normalizeAiPhoto = (item: unknown): AiPhotoResponseDto | null => {
   };
 };
 
+const normalizeGeneratedAiResponse = (data: unknown): AiPhotoResponseDto | null => {
+  if (!isRecord(data)) return null;
+
+  const normalizedRoot = normalizeAiPhoto(data);
+  const albumItem = unwrap(data, "albumItem", "album_item", "photo", "data");
+  const normalizedAlbumItem = normalizeAiPhoto(albumItem);
+
+  if (!normalizedAlbumItem) return normalizedRoot;
+  if (!normalizedRoot) return normalizedAlbumItem;
+
+  return {
+    ...normalizedAlbumItem,
+    id: normalizedAlbumItem.id || normalizedRoot.id,
+    status: normalizedRoot.status,
+    title: normalizedAlbumItem.title || normalizedRoot.title,
+    imageUrl: normalizedAlbumItem.imageUrl ?? normalizedRoot.imageUrl,
+    sourceSetlogIds: normalizedAlbumItem.sourceSetlogIds.length
+      ? normalizedAlbumItem.sourceSetlogIds
+      : normalizedRoot.sourceSetlogIds,
+    baseSetlogId: normalizedAlbumItem.baseSetlogId ?? normalizedRoot.baseSetlogId,
+    moderationStatus: normalizedAlbumItem.moderationStatus ?? normalizedRoot.moderationStatus,
+    createdAt: normalizedAlbumItem.createdAt || normalizedRoot.createdAt,
+    errorMessage: normalizedAlbumItem.errorMessage ?? normalizedRoot.errorMessage
+  };
+};
+
 const normalizeCaptionSuggestion = (item: unknown): CaptionSuggestionDto | null => {
   const value = unwrap(item, "item", "data", "suggestion");
   if (!isRecord(value)) return null;
@@ -470,8 +497,8 @@ export function buildSetlogUploadFormData(payload: CreateSetlogRequest): FormDat
   for (const [key, value] of Object.entries(payload)) {
     if (key === "topic" || key === "durationSeconds" || key === "moderationProvider") continue;
     if (value === undefined || value === null) continue;
-    if (key === "media" && value instanceof Blob) {
-      formData.append("media", value, uploadNameForBlob(value));
+    if (value instanceof Blob) {
+      formData.append(key, value, uploadNameForBlob(value));
       continue;
     }
     formData.append(key, String(value));
@@ -632,19 +659,7 @@ export const api = {
         }),
         timeoutMs: AI_TIMEOUT_MS
       },
-      (data) => {
-        const root: UnknownRecord = isRecord(data) ? data : {};
-        const albumItem = unwrap(data, "albumItem", "album_item", "photo", "data");
-        const normalized = normalizeAiPhoto(albumItem);
-        if (!normalized) return null;
-        const generatedImageUrl = asOptionalString(pick(root, "generatedImageUrl", "generated_image_url"));
-        return {
-          ...normalized,
-          imageUrl: normalized.imageUrl ?? (generatedImageUrl ? toApiAssetUrl(generatedImageUrl) : null),
-          baseSetlogId: normalized.baseSetlogId ?? asOptionalString(pick(root, "baseSetlogId", "base_setlog_id")),
-          status: oneOf(pick(root, "status"), ["pending", "processing", "completed", "failed", "blocked"], normalized.status)
-        };
-      }
+      normalizeGeneratedAiResponse
     ),
 
   createMemoPhoto: (payload: CreateMemoPhotoRequest) =>
@@ -662,18 +677,6 @@ export const api = {
         }),
         timeoutMs: AI_TIMEOUT_MS
       },
-      (data) => {
-        const root: UnknownRecord = isRecord(data) ? data : {};
-        const albumItem = unwrap(data, "albumItem", "album_item", "photo", "data");
-        const normalized = normalizeAiPhoto(albumItem);
-        if (!normalized) return null;
-        const generatedImageUrl = asOptionalString(pick(root, "generatedImageUrl", "generated_image_url"));
-        return {
-          ...normalized,
-          imageUrl: normalized.imageUrl ?? (generatedImageUrl ? toApiAssetUrl(generatedImageUrl) : null),
-          baseSetlogId: normalized.baseSetlogId ?? asOptionalString(pick(root, "baseSetlogId", "base_setlog_id")),
-          status: oneOf(pick(root, "status"), ["pending", "processing", "completed", "failed", "blocked"], normalized.status)
-        };
-      }
+      normalizeGeneratedAiResponse
     )
 };
