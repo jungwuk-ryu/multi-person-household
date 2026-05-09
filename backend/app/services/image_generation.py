@@ -46,18 +46,21 @@ class ImageGenerationService:
         OpenAI = self._get_openai_client_class()
 
         normalized_sources = self._normalize_sources(sources, base_setlog_id)
+        source_paths = self._resolve_group_source_paths(normalized_sources)
         candidate_count = max(1, min(settings.openai_image_parallel_requests, 3))
         prompts = [self._build_prompt(prompt, normalized_sources, candidate_index=index) for index in range(candidate_count)]
         logger.info(
-            "OpenAI group generation dispatch candidates=%s timeout=%.0fs model=%s base_setlog_id=%s",
+            "OpenAI group edit dispatch candidates=%s source_images=%s source_order=%s timeout=%.0fs model=%s base_setlog_id=%s",
             candidate_count,
+            len(source_paths),
+            [path.name for path in source_paths],
             settings.openai_image_timeout_seconds,
             settings.openai_image_model,
             base_setlog_id,
         )
 
         try:
-            result = self._generate_fastest(OpenAI, settings, prompts)
+            result = self._edit_group_fastest(OpenAI, settings, source_paths, prompts)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -167,6 +170,66 @@ class ImageGenerationService:
                 future.cancel()
             executor.shutdown(wait=False, cancel_futures=True)
 
+    def _edit_group_fastest(self, openai_cls, settings, source_paths: list[Path], prompts: list[str]):
+        if not source_paths:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "SOURCE_IMAGE_NOT_FOUND", "message": "Selected Setlogs need image thumbnails for meetup generation."},
+            )
+        if len(prompts) == 1:
+            return self._edit_group_with_retry(openai_cls, settings, source_paths, prompts[0])
+
+        executor = ThreadPoolExecutor(max_workers=len(prompts), thread_name_prefix="openai-group-edit")
+        pending: set[Future] = {executor.submit(self._edit_group_with_retry, openai_cls, settings, source_paths, prompt) for prompt in prompts}
+        errors: list[Exception] = []
+        try:
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    try:
+                        return future.result()
+                    except Exception as exc:
+                        errors.append(exc)
+            if errors:
+                raise errors[-1]
+            raise RuntimeError("OpenAI group image edit did not return a result.")
+        finally:
+            for future in pending:
+                future.cancel()
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    def _edit_group_with_retry(self, openai_cls, settings, source_paths: list[Path], prompt: str):
+        last_error: Exception | None = None
+        for attempt in range(settings.openai_image_max_retries + 1):
+            image_files = []
+            handles = []
+            try:
+                client = openai_cls(api_key=settings.openai_api_key)
+                for source_path in source_paths:
+                    mime_type = mimetypes.guess_type(source_path.name)[0] or "image/png"
+                    handle = source_path.open("rb")
+                    handles.append(handle)
+                    image_files.append((source_path.name, handle, mime_type))
+                return client.images.edit(
+                    model=settings.openai_image_model,
+                    image=image_files if len(image_files) > 1 else image_files[0],
+                    prompt=prompt,
+                    size="1024x1024",
+                    n=1,
+                    timeout=settings.openai_image_timeout_seconds,
+                )
+            except Exception as exc:
+                last_error = exc
+                if attempt >= settings.openai_image_max_retries or not self._is_rate_limit(exc):
+                    raise
+                time.sleep(0.8 * (attempt + 1))
+            finally:
+                for handle in handles:
+                    handle.close()
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("OpenAI group image edit failed.")
+
     def _edit_with_retry(self, openai_cls, settings, source_path: Path, prompt: str):
         last_error: Exception | None = None
         mime_type = mimetypes.guess_type(source_path.name)[0] or "image/png"
@@ -213,6 +276,28 @@ class ImageGenerationService:
             normalized = [replace(source, is_base=source.setlog_id == base_setlog_id) for source in normalized]
         return normalized
 
+    def _resolve_group_source_paths(self, sources: list[GroupPhotoSource]) -> list[Path]:
+        ordered_sources = sorted(sources, key=lambda source: 0 if source.is_base else 1)
+        paths: list[Path] = []
+        seen: set[Path] = set()
+        for source in ordered_sources:
+            for media_url in (source.thumbnail_url, source.media_url):
+                path = self._resolve_optional_image_path(media_url)
+                if path is None or path in seen:
+                    continue
+                paths.append(path)
+                seen.add(path)
+                break
+        return paths
+
+    def _resolve_optional_image_path(self, media_url: str) -> Path | None:
+        parsed_path = urlparse(media_url).path if "://" in media_url else media_url
+        path = media_path_from_url(parsed_path)
+        if path is None or not path.exists() or not path.is_file():
+            return None
+        mime_type = mimetypes.guess_type(path.name)[0] or ""
+        return path if mime_type.startswith("image/") else None
+
     def _build_prompt(self, prompt: str, sources: list[GroupPhotoSource], candidate_index: int = 0) -> str:
         base_source = next((source for source in sources if source.is_base), sources[0] if sources else None)
         base_place = (
@@ -233,11 +318,13 @@ class ImageGenerationService:
 {prompt}
 
 Create one realistic photo for the Korean app '다인가구'.
+Use the provided input images as the actual source Setlogs. Do not ignore them or invent a completely new scene.
 Use this as the only location: {base_place}.
+The first provided input image is the user-selected 기준 장소. Use that first image as the strongest reference for the room/place, lighting, camera angle, and background.
 Show every participant from the source logs together in that same place, as if they actually met there.
 Do not create a collage, split screen, poster, UI mockup, stickers, captions, watermarks, or duplicated people.
 Keep the scene photorealistic and casual: {composition}.
-Preserve the source-log situations as small natural details when possible, but the final image must look like one single camera photo.
+Preserve the people, clothing, food, objects, pose, and atmosphere visible in the source images as much as possible, but the final image must look like one single camera photo.
 
 Source logs:
 {source_lines}

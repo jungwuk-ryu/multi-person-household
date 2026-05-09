@@ -14,7 +14,7 @@ from app.database import engine
 from app.database import create_db_and_tables
 from app.main import app
 from app.models import Setlog
-from app.services.image_generation import DEMO_GENERATED_ASSET_URL, ImageGenerationService
+from app.services.image_generation import DEMO_GENERATED_ASSET_URL, GroupPhotoSource, ImageGenerationService
 from app.services.media import media_path_from_url
 from app.seed import seed_database
 
@@ -257,6 +257,78 @@ def test_mock_ai_memo_photo_generation():
     assert body["generatedImageUrl"] == DEMO_GENERATED_ASSET_URL
     assert body["generatedImageUrl"] != "/uploads/seed/meal-01.jpg"
     assert body["albumItem"]["imageUrl"] == DEMO_GENERATED_ASSET_URL
+
+
+def test_real_group_photo_uses_selected_setlog_images_and_saves_generated_output(monkeypatch, tmp_path):
+    import openai
+
+    class FakeImages:
+        def __init__(self):
+            self.edit_calls = []
+            self.generate_calls = []
+
+        def edit(self, **kwargs):
+            self.edit_calls.append(kwargs)
+            return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(b"group-image").decode("ascii"))])
+
+        def generate(self, **kwargs):
+            self.generate_calls.append(kwargs)
+            return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(b"wrong-image").decode("ascii"))])
+
+    fake_images = FakeImages()
+
+    class FakeOpenAI:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.images = fake_images
+
+    monkeypatch.setattr(openai, "OpenAI", FakeOpenAI)
+    monkeypatch.setenv("MOCK_AI", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_IMAGE_PARALLEL_REQUESTS", "1")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    try:
+        seed_dir = tmp_path / "seed"
+        seed_dir.mkdir(parents=True, exist_ok=True)
+        (seed_dir / "base.jpg").write_bytes(b"base-image")
+        (seed_dir / "friend.jpg").write_bytes(b"friend-image")
+        sources = [
+            GroupPhotoSource(
+                setlog_id="s_friend",
+                user_name="친구",
+                caption="고기 먹는 중",
+                category="meal",
+                city_label="성수",
+                media_url="/uploads/seed/friend-video.mp4",
+                thumbnail_url="/uploads/seed/friend.jpg",
+            ),
+            GroupPhotoSource(
+                setlog_id="s_base",
+                user_name="나",
+                caption="내 자취방",
+                category="chat",
+                city_label="성수",
+                media_url="/uploads/seed/base-video.mp4",
+                thumbnail_url="/uploads/seed/base.jpg",
+            ),
+        ]
+        generated_url = ImageGenerationService().generate_group_photo("한 장소에서 같이 있는 사진", sources, base_setlog_id="s_base")
+        generated_path = media_path_from_url(generated_url)
+
+        assert generated_url.startswith("/uploads/generated/group-photo-")
+        assert generated_path is not None
+        assert generated_path.exists()
+        assert generated_path.read_bytes() == b"group-image"
+        assert len(fake_images.edit_calls) == 1
+        assert fake_images.generate_calls == []
+        image_inputs = fake_images.edit_calls[0]["image"]
+        assert [item[0] for item in image_inputs] == ["base.jpg", "friend.jpg"]
+        assert "provided input images" in fake_images.edit_calls[0]["prompt"]
+        assert "first provided input image is the user-selected 기준 장소" in fake_images.edit_calls[0]["prompt"]
+    finally:
+        get_settings.cache_clear()
 
 
 def test_real_memo_photo_uses_openai_sdk_and_saves_generated_output(monkeypatch, tmp_path):
