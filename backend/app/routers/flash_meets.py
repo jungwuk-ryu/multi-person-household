@@ -1,0 +1,69 @@
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, status
+from sqlmodel import Session, select
+
+from app.crud import api_error, get_or_create_room, get_user_or_404, make_id
+from app.database import get_session
+from app.models import FlashMeet, FlashMeetStatus
+from app.schemas import FlashMeetCreateRequest, FlashMeetCreateResponse, FlashMeetJoinRequest, FlashMeetJoinResponse, FlashMeetsResponse
+from app.services.realtime import manager
+
+router = APIRouter(prefix="/api/flash-meets", tags=["flash-meets"])
+
+
+def flash_out(session: Session, meet: FlashMeet) -> dict:
+    # Build one shared shape for REST responses and broadcast payloads.
+    creator = get_user_or_404(session, meet.creator_id)
+    return {
+        "id": meet.id,
+        "creator_id": meet.creator_id,
+        "creator_name": creator.display_name,
+        "type": meet.type,
+        "message": meet.message,
+        "city_label": meet.city_label,
+        "expires_at": meet.expires_at,
+        "participant_ids": meet.participant_ids,
+        "status": meet.status,
+    }
+
+
+@router.get("", response_model=FlashMeetsResponse)
+def list_flash_meets(userId: str = "user-mina", session: Session = Depends(get_session)):
+    get_user_or_404(session, userId)
+    now = datetime.now(timezone.utc)
+    meets = session.exec(select(FlashMeet).where(FlashMeet.status == FlashMeetStatus.active, FlashMeet.expires_at > now)).all()
+    return {"items": [flash_out(session, meet) for meet in meets]}
+
+
+@router.post("", response_model=FlashMeetCreateResponse)
+async def create_flash_meet(payload: FlashMeetCreateRequest, session: Session = Depends(get_session)):
+    get_user_or_404(session, payload.creator_id)
+    meet = FlashMeet(id=make_id("flash"), creator_id=payload.creator_id, type=payload.type, message=payload.message, city_label=payload.city_label, expires_at=datetime.now(timezone.utc) + timedelta(hours=payload.expires_in_hours), participant_ids=[payload.creator_id], status=FlashMeetStatus.active)
+    session.add(meet)
+    session.commit()
+    session.refresh(meet)
+    output = flash_out(session, meet)
+    await manager.broadcast("flash:new", {"flashMeet": output})
+    return {"item": output}
+
+
+@router.post("/{meet_id}/join", response_model=FlashMeetJoinResponse)
+async def join_flash_meet(meet_id: str, payload: FlashMeetJoinRequest, session: Session = Depends(get_session)):
+    meet = session.get(FlashMeet, meet_id)
+    if meet is None:
+        raise api_error(status.HTTP_404_NOT_FOUND, "FLASH_MEET_NOT_FOUND", "Flash meet not found")
+    get_user_or_404(session, payload.user_id)
+    if meet.creator_id == payload.user_id:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "CANNOT_JOIN_OWN_FLASH_MEET", "Creator cannot join own flash meet")
+    participants = list(meet.participant_ids)
+    # Repeated joins are idempotent; only add the participant once.
+    if payload.user_id not in participants:
+        participants.append(payload.user_id)
+        meet.participant_ids = participants
+    room = get_or_create_room(session, meet.creator_id, payload.user_id)
+    session.add(meet)
+    session.commit()
+    session.refresh(meet)
+    await manager.broadcast("flash:joined", {"flashMeetId": meet.id, "userId": payload.user_id, "chatRoomId": room.id})
+    return {"chat_room_id": room.id, "flash_meet": flash_out(session, meet)}

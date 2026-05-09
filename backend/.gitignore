@@ -1,0 +1,11 @@
+.pytest_cache/
+.uv-cache/
+.uv-python/
+.venv/
+__pycache__/
+**/__pycache__/
+setlog.db
+*.sqlite
+app/uploads/setlogs/*
+!app/uploads/setlogs/.gitkeep
+.env
