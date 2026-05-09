@@ -1,0 +1,234 @@
+goal: Build the backend MVP for Setlog, a public daily-log and lightweight flash-meet
+  app for one-person households. The backend must support a frontend teammate through
+  stable REST and WebSocket contracts, seed demo data, SQLite persistence, mock-first
+  AI safety/image flows, and a clear implementation boundary inside backend/.
+task_type: code
+brownfield_context:
+  project_type: greenfield
+  owner_role: backend
+  team_split:
+    backend_owner: Jungwuk
+    frontend_owner: separate teammate
+    backend_workspace: backend/
+    shared_contract_output: docs/promise/backend-api-contract.md
+  context_references:
+    - PRD_Jungwuk.md
+    - docs/promise/backend-api-contract.md
+    - Setlog-style real-time public daily media feed
+    - Hackathon mock-first MVP flow
+  existing_patterns:
+    - FastAPI application under backend/app
+    - Pydantic schemas for all request and response contracts
+    - SQLModel persistence with SQLite
+    - Alembic optional; create_all is acceptable for hackathon prototype
+    - FastAPI WebSocket endpoints for realtime chat and flash-meet events
+    - Local uploads directory for multipart media files
+    - URL media ingestion support for prototype image URLs
+    - AI service wrappers with MOCK_AI fallback
+  recommended_backend_stack:
+    language: Python 3.11+
+    web_framework: FastAPI
+    app_server: uvicorn
+    validation: Pydantic v2
+    database: SQLite
+    orm: SQLModel
+    multipart_uploads: python-multipart
+    static_files: FastAPI StaticFiles for /uploads
+    http_client: httpx for image URL ingestion and AI API calls
+    websocket: FastAPI WebSocket with connection manager
+    config: pydantic-settings with .env support
+    testing: pytest and httpx AsyncClient
+    ai_moderation: Gemini wrapper with mock fallback
+    ai_image_generation: OpenAI image wrapper with mock fallback
+constraints:
+  - All backend implementation files must live under backend/.
+  - Frontend implementation is out of scope.
+  - The backend must publish its API and WebSocket contract in docs/promise/backend-api-contract.md.
+  - Use SQLite because this is a prototype.
+  - Use demo-login only; no real authentication provider is required.
+  - Do not collect or expose phone numbers, real names, addresses, GPS coordinates, or precise location.
+  - Location filtering uses cityLabel or dong-level text only.
+  - MVP nearby filtering uses exact cityLabel match only; dong-level text is not required.
+  - Media can be uploaded as multipart files or submitted as imageUrl for prototype use.
+  - First MVP implementation accepts image media only; video is reserved in the schema but not required.
+  - Multipart uploads accept image/jpeg, image/png, image/webp, and image/gif up to 10MB.
+  - For imageUrl ingestion, backend should fetch and store the asset when feasible; if not feasible in mock mode, store the URL as mediaUrl.
+  - Seed media should use local placeholder assets under backend/app/uploads/seed/ to avoid network, CORS, and remote asset availability issues.
+  - Public feed returns only visibility=public and moderationStatus=approved Setlogs.
+  - Friend feed returns approved public/friends Setlogs from friend users only.
+  - sameGender feed includes the current user's own approved public Setlogs.
+  - meal feed uses Setlog category=meal, not caption keyword inference.
+  - MOCK_AI=true is the default demo mode and must not require external API keys.
+  - MOCK_AI=true moderation approves by default and blocks when filename, imageUrl, or caption contains blocked.
+  - MOCK_AI=true image generation returns a deterministic seed/generated-demo image URL.
+  - Real AI wrappers must be isolated so API keys can be added later without changing route contracts.
+  - Flash meets can expire after only 1, 2, or 3 hours.
+  - Flash meet lists include the current user's own active non-expired flash meets.
+  - Flash meets allow multiple participants in MVP.
+  - Flash meet creator self-join is forbidden.
+  - Joining a flash meet must create or reuse a one-to-one chat room between creator and participant.
+  - One-to-one chat rooms are unique per unordered user pair and reused across friendship and flash-meet flows.
+  - WebSocket events should mirror REST-created chat and flash-meet updates.
+  - WebSocket flash events are broadcast to all connected users.
+  - WebSocket chat events are sent only to connected members of the chat room after chat:join subscription.
+  - Chat message creation is REST-only in the MVP; WebSocket chat:message is reserved and should return an error envelope if received.
+  - All REST request and response JSON fields use camelCase.
+  - Demo identity is userId-based through query, JSON body, or multipart form fields; bearer token parsing is not required.
+  - Common REST errors use an error envelope with code and message.
+  - WebSocket events use a type and payload envelope; WebSocket errors use type=error with code and message in payload.
+  - Blocked Setlogs are persisted and returned from create requests with moderationStatus=blocked, but are never returned by feeds.
+  - POST /api/setlogs returns 201 Created for both approved and blocked moderation outcomes.
+  - AI group photo requests use sourceSetlogIds; memberIds are derived from source Setlog authors.
+  - AI group photo results are persisted as user-owned album items only and are not automatically posted to feeds.
+  - GET /api/album?userId={userId} returns album items owned by that user.
+  - Seed IDs are stable human-readable strings and must be documented in docs/promise/backend-api-contract.md.
+  - Database seed behavior must be idempotent on startup: create tables and insert missing seed records without wiping existing data or uploads.
+acceptance_criteria:
+  - backend/ contains a runnable FastAPI app.
+  - backend/README.md explains install, env, seed, run, and test commands.
+  - backend/.env.example documents PORT, CLIENT_ORIGIN, DATABASE_URL, MOCK_AI, OPENAI_API_KEY, GEMINI_API_KEY, and UPLOAD_DIR.
+  - SQLite schema covers users, setlogs, friendships, flash_meets, chat_rooms, chat_messages, album_items, and moderation results or equivalent fields.
+  - Seed data includes at least 4 demo users, public Setlogs, friend-only Setlogs, active flash meets, one expired flash meet, friend relationships, chat history, and one album item.
+  - Seed setup creates or references local placeholder image files under backend/app/uploads/seed/.
+  - POST /api/auth/demo-login returns a token formatted like demo-{userId} and a user object.
+  - GET /api/users returns seed demo users for frontend login selection.
+  - GET /api/setlogs supports filter=all|friends|sameGender|nearby|meal and userId.
+  - POST /api/setlogs supports multipart upload.
+  - POST /api/setlogs/from-url supports JSON imageUrl creation.
+  - POST /api/setlogs returns 201 with moderationStatus and never exposes blocked Setlogs in feeds.
+  - GET /api/flash-meets returns only active non-expired flash meets.
+  - POST /api/flash-meets creates a flash meet and broadcasts flash:new.
+  - POST /api/flash-meets/{id}/join adds the user, returns chatRoomId, and broadcasts flash:joined.
+  - POST /api/friends/{targetUserId} creates an immediate symmetric friendship.
+  - GET /api/chats returns rooms for the current user with latest message summary.
+  - GET /api/chats/{roomId}/messages returns chronological messages.
+  - POST /api/chats/{roomId}/messages persists a message and broadcasts chat:new-message.
+  - GET /api/album returns user-owned album items.
+  - WebSocket endpoint exists at /ws?userId={userId}.
+  - WebSocket supports chat:join, chat:new-message, flash:new, flash:joined, and reserved chat:message error handling.
+  - POST /api/ai/group-photo runs pre-moderation, image generation or mock fallback, post-moderation, and album item persistence.
+  - docs/promise/backend-api-contract.md exactly matches implemented request and response shapes.
+  - Automated smoke tests cover demo-login, setlog filters, flash meet join, chat message creation, and mock AI group photo.
+  - Automated smoke tests prove startup seeding is idempotent.
+ontology_schema:
+  name: SetlogFastApiBackend
+  description: Backend domain model for a FastAPI-based Setlog MVP with SQLite, REST, WebSocket, media handling, and mockable AI.
+  fields:
+    - name: user
+      type: object
+      required: true
+      description: Demo user with id, displayName, avatarUrl, gender, cityLabel, and bio.
+    - name: setlog
+      type: object
+      required: true
+      description: Public or friend daily media item with mediaUrl, optional thumbnailUrl, caption, category, hourSlot, visibility, and moderationStatus.
+    - name: setlog_category
+      type: enum
+      required: true
+      description: meal, daily, exercise, hobby, or other. Defaults to daily and powers the meal feed.
+    - name: media_source
+      type: enum
+      required: true
+      description: multipart_upload or image_url.
+    - name: feed_filter
+      type: enum
+      required: true
+      description: all, friends, sameGender, nearby, or meal.
+    - name: flash_meet
+      type: object
+      required: true
+      description: Short-lived invitation with type, message, cityLabel, expiresAt, participantIds, and status.
+    - name: friendship
+      type: object
+      required: true
+      description: Symmetric MVP relation used by friend feed and chat.
+    - name: chat_room
+      type: object
+      required: true
+      description: One-to-one room created by friendship or flash-meet join.
+    - name: chat_message
+      type: object
+      required: true
+      description: Persisted text message with senderId, text, optional imageUrl, and createdAt.
+    - name: websocket_event
+      type: object
+      required: true
+      description: JSON event envelope with type and payload.
+    - name: moderation_result
+      type: object
+      required: true
+      description: approved or blocked decision with reasons and categories.
+    - name: album_item
+      type: object
+      required: true
+      description: Stored setlog or ai_group_photo item with memberIds and sourceSetlogIds.
+evaluation_principles:
+  - name: FrontendContractReadiness
+    description: Frontend can start independently from docs/promise/backend-api-contract.md and seed IDs.
+    weight: 0.3
+  - name: DemoCompleteness
+    description: Full demo flow works from login to feed, flash meet, chat, album, and AI group photo.
+    weight: 0.25
+  - name: MockFirstReliability
+    description: No external API or network dependency can block the hackathon demo.
+    weight: 0.2
+  - name: PrivacySafety
+    description: No exact identity/location exposure, blocked moderation results are excluded, AI has pre/post checks.
+    weight: 0.15
+  - name: BackendIsolation
+    description: Backend work remains inside backend/ while shared API promise remains in docs/promise.
+    weight: 0.1
+exit_conditions:
+  - name: SeedReady
+    description: Product direction is concrete enough for Codex implementation.
+    criteria: Goal, constraints, stack, seed data requirements, API acceptance criteria, and open questions are explicit.
+  - name: ContractReady
+    description: Frontend/backend parallel work is unblocked.
+    criteria: docs/promise/backend-api-contract.md lists endpoints, request bodies, response bodies, errors, seed IDs, and WebSocket events.
+  - name: MockAiReady
+    description: AI flows can be tested without external keys.
+    criteria: MOCK_AI=true handles moderation and group-photo generation deterministically.
+  - name: PrototypePersistenceReady
+    description: SQLite is sufficient for local prototype persistence.
+    criteria: Database models persist all required demo entities and can be reset or seeded.
+metadata:
+  seed_id: seed_jungwuk_fastapi_backend_setlog_mvp
+  version: 1.0.0
+  created_at: "2026-05-09T00:00:00+09:00"
+  source_prd: PRD_Jungwuk.md
+  owner_scope: backend
+  codex_goal_document: CODEX_GOAL_Jungwuk_backend.md
+  contract_document: docs/promise/backend-api-contract.md
+  ambiguity_score: 0.02
+  parent_seed_id: null
+  resolved_interview_answers:
+    - Backend stack is FastAPI with WebSocket communication.
+    - Database is SQLite for prototype persistence.
+    - Media upload follows the recommended local uploads approach.
+    - Image URL input is supported for prototype use.
+    - AI is mock-first, then designed for real Gemini/OpenAI API wrappers.
+    - Backend work is isolated under backend/.
+    - API and socket contract must be saved under docs/promise.
+    - WebSocket flash:new is broadcast globally; chat:new-message is sent only to joined room members.
+    - Seed media uses local placeholder files because it is more reliable than external URLs for demos.
+    - Seed database behavior is idempotent on startup.
+    - First MVP accepts image media only; video remains schema-reserved.
+    - JSON request and response fields are camelCase only.
+    - Demo identity is userId-based; demo-login still returns demo-{userId}, but MVP endpoints do not require bearer auth parsing.
+    - Setlog category is an enum with meal, daily, exercise, hobby, and other; filter=meal returns category=meal.
+    - filter=nearby uses exact cityLabel match.
+    - filter=sameGender includes the current user's own approved public Setlogs.
+    - filter=friends excludes the current user's own Setlogs and returns friend-authored public/friends Setlogs only.
+    - Flash meets support multiple participants, include the current user's own active meets in lists, and forbid creator self-join.
+    - One-to-one chat rooms are unique per unordered user pair and reused across friendship and flash meet joins.
+    - Chat message creation is text-only through REST; imageUrl is reserved as nullable response data.
+    - WebSocket chat:message is reserved for MVP and should produce an error envelope rather than persisting messages.
+    - Blocked Setlogs are persisted, returned from create with 201 and moderationStatus=blocked, and excluded from feeds.
+    - AI group photo uses sourceSetlogIds, derives memberIds from source Setlog authors, and stores a user-owned album item without feed posting.
+    - GET /api/album?userId={userId} is part of the MVP contract.
+    - Seed IDs are stable human-readable strings and documented in the backend API contract.
+    - REST errors use an error envelope; WebSocket messages use type/payload and errors use type=error.
+    - imageUrl ingestion should try to fetch but store the original URL as mediaUrl if fetching fails.
+    - Multipart uploads allow image/jpeg, image/png, image/webp, and image/gif up to 10MB.
+  open_questions:
+    - Confirm final OpenAI image model name before non-mock implementation.
